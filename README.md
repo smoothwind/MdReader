@@ -1,6 +1,16 @@
 # MdReader
 
+[![CI](https://github.com/smoothwind/MdReader/actions/workflows/ci.yml/badge.svg)](https://github.com/smoothwind/MdReader/actions/workflows/ci.yml)
+[![Release](https://github.com/smoothwind/MdReader/actions/workflows/release.yml/badge.svg)](https://github.com/smoothwind/MdReader/actions/workflows/release.yml)
+[![GitHub Pages](https://github.com/smoothwind/MdReader/actions/workflows/pages.yml/badge.svg)](https://github.com/smoothwind/MdReader/actions/workflows/pages.yml)
+[![Release version](https://img.shields.io/github/v/release/smoothwind/MdReader?include_prereleases&label=release)](https://github.com/smoothwind/MdReader/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 参考 Typora 编辑体验的 Markdown 桌面工具，基于 **Vue 3 + Vditor**，支持 **Electron** 与 **Tauri 2 + WebView2** 双运行方案（渲染层 100% 共用，按需选择其一构建）。
+
+- 官网（GitHub Pages）：<https://smoothwind.github.io/MdReader/>
+- 在线体验（Web 演示版，无需安装）：<https://smoothwind.github.io/MdReader/app/>
+- 下载安装包：<https://github.com/smoothwind/MdReader/releases>
 
 ## 功能特性
 
@@ -25,6 +35,7 @@
 - **渲染样式自定义**：设置中切换内容主题（自动/Ant Design/WeChat 等）与自定义 CSS，实时预览，导出/打印继承
 - **主题**：浅色 / 深色（滚动条、右键菜单等全面适配），深浅即切
 - **其他**：字数统计、最近打开、拖拽打开、单实例运行、双击 `.md` 打开（安装后文件关联）
+- **Web 演示版**：同一渲染层在浏览器中运行（文档存浏览器本地、导出走下载、PDF 降级打印），随 `main` 自动部署到 GitHub Pages
 - **质量**：vitest 单元测试（`npm run test`）、CI 构建与 Rust 测试、原子写盘、版本号单一来源同步
 
 ## 技术栈
@@ -44,6 +55,7 @@
 npm install        # postinstall 会复制 vditor 静态资源到 src/renderer/public/vditor/
 npm run dev        # Electron 方案开发调试
 npm run tauri:dev  # Tauri 方案开发调试（需要 Rust 工具链：winget install Rustlang.Rustup）
+npm run dev:web    # Web 演示版开发调试（浏览器打开 http://localhost:5174/）
 ```
 
 > Electron 二进制下载缓慢可设置镜像：`$env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'`；
@@ -57,6 +69,16 @@ npm run tauri:build  # Tauri 方案 → src-tauri/target/release/bundle/nsis/（
 ```
 
 CI：推送 `v*` 标签会自动构建 Tauri 安装包并附加到 GitHub Release（见 `.github/workflows/`）。
+
+## CI / 自动化
+
+| 工作流 | 触发 | 作用 |
+| --- | --- | --- |
+| `ci.yml` | push / PR（`main`、`master`） | lint、单元测试、令牌与命令映射校验、Electron 构建、Rust `check` + `test` |
+| `release.yml` | 推送 `v*` 标签 | 同步版本号（`package.json` 为准）→ 构建 Tauri NSIS 安装包 → 附加到 GitHub Release；`beta`/`rc` 自动标记预发布 |
+| `pages.yml` | push `main` | 构建官网 + Web 演示版并部署 GitHub Pages（应用位于项目站 `/app/` 子路径） |
+
+在线入口由 `pages.yml` 发布后可用：官网 <https://smoothwind.github.io/MdReader/>，Web 演示版 <https://smoothwind.github.io/MdReader/app/>。
 
 ## 快捷键
 
@@ -77,10 +99,12 @@ CI：推送 `v*` 标签会自动构建 Tauri 安装包并附加到 GitHub Releas
 ```
 MdReader/
 ├── electron.vite.config.mjs      # Electron 构建配置
-├── vite.tauri.config.mjs         # Tauri 前端构建配置
+├── vite.tauri.config.mjs         # Tauri / Web 前端构建配置（WEB_BASE 支持子路径部署）
 ├── electron-builder.yml          # Electron 打包配置
-├── scripts/copy-vditor.mjs       # postinstall 复制 vditor 静态资源
-├── .github/workflows/            # CI 与 Release 工作流
+├── website/index.html            # GitHub Pages 官网落地页
+├── vendor/uxkit/                 # @ux 组件库副本（CI/Pages 无上游仓库时使用）
+├── scripts/                      # copy-vditor / sync-version / sync-ux / check-*
+├── .github/workflows/            # ci.yml / release.yml / pages.yml
 ├── src-tauri/                    # Tauri 2 Rust 外壳（方案 B）
 │   ├── src/lib.rs                # 窗口/托盘/菜单/文件/链接分流/监控
 │   ├── tauri.conf.json
@@ -89,13 +113,15 @@ MdReader/
     ├── main/index.js             # Electron 主进程（方案 A）
     ├── preload/index.js          # contextBridge API
     └── renderer/
-        ├── index.html
+        ├── index.html            # CSP 与 favicon
         ├── public/vditor/        # 运行时编辑器资源（gitignore）
         └── src/
             ├── App.vue           # 标签页/命令路由/拖拽/会话/自动保存
             ├── store.js          # 全局响应式状态
             ├── welcome.js        # 内置欢迎文档
-            ├── api/tauri-mdreader.js  # Tauri 适配器（与 preload 同接口）
+            ├── api/                  # window.mdreader 三端契约
+            │   ├── tauri-mdreader.js # Tauri 适配器
+            │   └── web-mdreader.js   # 浏览器降级适配器（Web 演示版）
             ├── composables/useTheme.js
             ├── utils/mindmap-convert.js
             ├── components/
@@ -109,3 +135,8 @@ MdReader/
             │   └── LineChart.vue       # ECharts 折线图（按需加载）
             └── styles/main.css   # CSS 变量双主题
 ```
+
+## 许可证
+
+MIT（见 [LICENSE](LICENSE)）。
+
