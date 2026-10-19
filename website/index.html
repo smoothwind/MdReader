@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MdReader — 所见即所得的 Markdown 编辑器</title>
+<meta name="description" content="参考 Typora 编辑体验的 Markdown 桌面工具：实时渲染、Mermaid 图表、脑图、多标签、主题切换，Electron 与 Tauri 双运行方案。" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --bg-soft: #f6f8fa;
+    --fg: #1f2328;
+    --fg-muted: #59636e;
+    --border: #d1d9e0;
+    --accent: #0969da;
+    --accent-soft: rgba(9, 105, 218, 0.08);
+    --card-shadow: 0 1px 3px rgba(31, 35, 40, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --bg-soft: #151b23;
+      --fg: #f0f6fc;
+      --fg-muted: #9198a1;
+      --border: #3d444d;
+      --accent: #4493f8;
+      --accent-soft: rgba(68, 147, 248, 0.12);
+      --card-shadow: 0 1px 3px rgba(1, 4, 9, 0.4);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    line-height: 1.7;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav { display: flex; align-items: center; gap: 20px; height: 60px; }
+  .brand { font-weight: 700; font-size: 18px; color: var(--fg); }
+  .brand .logo { color: var(--accent); }
+  .nav .spacer { flex: 1; }
+  .nav a.item { color: var(--fg-muted); font-size: 14px; }
+  .nav a.item:hover { color: var(--fg); text-decoration: none; }
+
+  .hero { padding: 84px 0 64px; text-align: center; }
+  .hero h1 { font-size: 44px; letter-spacing: -0.5px; margin-bottom: 16px; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero p.sub { font-size: 18px; color: var(--fg-muted); max-width: 640px; margin: 0 auto 32px; }
+  .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 11px 22px; border-radius: 8px;
+    font-size: 15px; font-weight: 600; border: 1px solid var(--border);
+    color: var(--fg); background: var(--bg-soft);
+  }
+  .btn:hover { text-decoration: none; border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { opacity: 0.92; }
+
+  .badges { margin-top: 26px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .badge {
+    font-size: 12.5px; color: var(--fg-muted); border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px 12px; background: var(--bg-soft);
+  }
+
+  section { padding: 48px 0; }
+  section h2 { font-size: 26px; margin-bottom: 8px; text-align: center; }
+  section p.lead { text-align: center; color: var(--fg-muted); margin-bottom: 36px; }
+  .grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  .card {
+    border: 1px solid var(--border); border-radius: 10px; padding: 20px;
+    background: var(--bg-soft); box-shadow: var(--card-shadow);
+  }
+  .card h3 { font-size: 16px; margin-bottom: 6px; }
+  .card h3 .ico { margin-right: 8px; }
+  .card p { font-size: 14px; color: var(--fg-muted); }
+
+  .stack {
+    display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+  }
+  .stack .badge { font-size: 13px; padding: 6px 14px; }
+
+  .demo-hint {
+    margin-top: 14px; text-align: center; font-size: 13.5px; color: var(--fg-muted);
+  }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 28px 0 40px;
+    text-align: center; color: var(--fg-muted); font-size: 13.5px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap nav">
+    <span class="brand"><span class="logo">▮▯</span> MdReader</span>
+    <span class="spacer"></span>
+    <a class="item" href="#features">功能</a>
+    <a class="item" href="./app/">在线体验</a>
+    <a class="item" href="https://github.com/smoothwind/MdReader/releases">下载</a>
+    <a class="item" href="https://github.com/smoothwind/MdReader">GitHub</a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <h1>所见即所得的 <em>Markdown</em> 编辑器</h1>
+    <p class="sub">
+      参考 Typora 编辑体验的桌面工具：输入即渲染、Mermaid 图表、脑图画布、多标签与主题切换，
+      基于 Vue 3 + Vditor，提供 Electron 与 Tauri 2 双运行方案。
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="./app/">在线体验 Web 版</a>
+      <a class="btn" href="https://github.com/smoothwind/MdReader/releases/latest">下载 Windows 安装包</a>
+      <a class="btn" href="https://github.com/smoothwind/MdReader">查看源码</a>
+    </div>
+    <div class="badges">
+      <span class="badge">Windows</span>
+      <span class="badge">Vue 3 + Vite</span>
+      <span class="badge">Vditor WYSIWYG</span>
+      <span class="badge">Electron / Tauri 2</span>
+      <span class="badge">MIT</span>
+    </div>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <h2>功能特性</h2>
+      <p class="lead">为长期写作与文档阅读打磨的细节</p>
+      <div class="grid">
+        <div class="card"><h3><span class="ico">✍️</span>所见即所得编辑</h3><p>Vditor WYSIWYG 模式，输入即所见，无需切换预览窗口。</p></div>
+        <div class="card"><h3><span class="ico">🧩</span>全类型源码可见</h3><p>Mermaid / 图表 / 数学 / HTML 面板原地编辑源码，双击段落与表格精确编辑 Markdown。</p></div>
+        <div class="card"><h3><span class="ico">📊</span>Mermaid 与图表</h3><p>流程图、时序图、甘特图离线渲染；代码块一键导出 PNG，表格导出图片 / Excel。</p></div>
+        <div class="card"><h3><span class="ico">🧠</span>脑图画布</h3><p><code>Ctrl+M</code> 插入模板，画布可视化编辑，支持导出 JSON / SVG / PNG。</p></div>
+        <div class="card"><h3><span class="ico">🗂️</span>多标签与文件树</h3><p>标签切换 / 中键关闭 / 会话恢复；按文件夹浏览文档，当前文件自动定位。</p></div>
+        <div class="card"><h3><span class="ico">🔎</span>查找替换</h3><p><code>Ctrl+F</code> / <code>Ctrl+H</code>，大小写区分，逐个或全部替换。</p></div>
+        <div class="card"><h3><span class="ico">🧰</span>富文本浮动工具条</h3><p>加粗 / 斜体 / 上下标 / 高亮 / 波浪线 / 颜色 / 字号字体，选区一键转 Markdown。</p></div>
+        <div class="card"><h3><span class="ico">📤</span>导出与打印</h3><p>导出 HTML / Word / 整篇长图 / PDF（打印另存），代码块保留 ASCII 排版。</p></div>
+        <div class="card"><h3><span class="ico">🔗</span>链接智能分流</h3><p>锚点文内跳转、外链开浏览器、本地 .md 应用内打开，悬浮显示地址与校验。</p></div>
+        <div class="card"><h3><span class="ico">🖼️</span>图片插入</h3><p>拖入或粘贴图片，自动复制到文档旁 <code>assets/</code> 并插入相对引用。</p></div>
+        <div class="card"><h3><span class="ico">🌗</span>主题与样式</h3><p>浅色 / 深色全面适配即切；内容主题（Ant Design / WeChat 等）与自定义 CSS。</p></div>
+        <div class="card"><h3><span class="ico">⚙️</span>性能与监控</h3><p>各进程内存 / CPU 实时折线图、启动参数调优、自动保存与外部修改检测。</p></div>
+      </div>
+      <p class="demo-hint">Web 版为浏览器演示（文档保存在本地浏览器存储，部分系统能力仅桌面版可用）</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>技术栈</h2>
+      <p class="lead">渲染层 100% 共用，按需选择 Electron 或 Tauri 构建</p>
+      <div class="stack">
+        <span class="badge">Vue 3</span>
+        <span class="badge">Vite</span>
+        <span class="badge">Vditor</span>
+        <span class="badge">Electron</span>
+        <span class="badge">Tauri 2 + WebView2</span>
+        <span class="badge">ECharts</span>
+        <span class="badge">Lute</span>
+        <span class="badge">Vitest</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    MdReader · MIT License ·
+    <a href="https://github.com/smoothwind/MdReader">GitHub</a> ·
+    <a href="./app/">Web 演示</a>
+  </div>
+</footer>
+</body>
+</html>

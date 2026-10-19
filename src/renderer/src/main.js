@@ -1,4 +1,5 @@
 import './api/tauri-mdreader.js'
+import './api/web-mdreader.js'
 import { createApp } from 'vue'
 import App from './App.vue'
 import '@ux/tokens/tokens.css'

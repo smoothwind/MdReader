@@ -1,6 +1,6 @@
 [package]
 name = "mdreader"
-version = "0.2.3"
+version = "0.3.0-beta.1"
 description = "支持实时渲染、Mermaid 图表与主题切换的 Markdown 桌面工具"
 authors = ["Aides"]
 edition = "2021"

@@ -1,3 +1,5 @@
+import { publicPath } from './utils/assets'
+
 export const welcomeDoc = `# MdReader 功能简介
 
 所见即所得的 Markdown 桌面编辑器，支持 **实时渲染**、**Mermaid 图表** 与 **主题切换**。
@@ -92,7 +94,7 @@ sequenceDiagram
 
 **图片**：支持相对路径与网络地址；把图片文件拖进窗口，会自动复制到文档旁 \`assets/\` 目录并插入引用：
 
-![MdReader Logo](vditor/dist/images/logo.png)
+![MdReader Logo](${publicPath('./vditor/dist/images/logo.png')})
 
 ## 快捷键
 

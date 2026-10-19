@@ -1,8 +1,11 @@
 # Release Notes
 
-## Unreleased
+## v0.3.0-beta.1（2026-10-19）
 
 ### 新增
+
+- **Web 演示版与 GitHub Pages 官网**：纯浏览器降级适配器（`web-mdreader`，文档存浏览器本地、导出走下载、PDF 降级打印），官网落地页 + 在线体验入口；推送 main 自动部署（`.github/workflows/pages.yml`，应用位于项目站 `/app/` 子路径）
+- **@ux 组件库 vendor 化**：`vendor/uxkit/` 收录 UX-FRW 源码副本，CI/Pages 无外部仓库也能构建；本地仍直连 `../UX-FRW`，`npm run sync-ux` 同步副本，`FORCE_VENDORED_UX=1` 可本地验证 CI 行为
 - **代码块语言徽标图标**：悬停代码块时徽标显示语言图标 + 语言名；内置 21 个双主题配色徽标（17 语言 + JSON/SQL/Shell/Mermaid），颜色走 `tokens.css` 的 `--lang-*` 语义令牌（WCAG 1.4.11 对浅/深共四种底色实测 ≥3.3:1，深色主题自动切换提亮色值）；未识别语言退化为纯文本徽标
 
 - **查找替换增强**：新增正则表达式与整词匹配开关（与大小写区分正交组合）
@@ -23,6 +26,7 @@
 
 ### 修复
 
+- **CI 分支监听失效**：ci.yml 仅监听 master，仓库实际分支为 main，推送后 CI 从未运行；改为 main/master 双监听
 - **Electron 关闭假死**：preload 未暴露 `onDropImage` 导致启动注册链中断、`onRequestSaveExit` 缺失，关闭窗口时"保存全部"后无法退出；已补齐接口并做存在性防御
 - **保存链路零容错**：保存/另存为/关闭标签/保存全部退出增加错误捕获与用户提示；保存失败（含用户取消）不再无条件退出，避免数据丢失
 - **导出文件名恒为"未命名"**：`baseName()` 误引用不存在的 `store.fileName`，改为取活动标签文件名

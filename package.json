@@ -1,6 +1,6 @@
 {
   "name": "mdreader",
-  "version": "0.2.3",
+  "version": "0.3.0-beta.1",
   "description": "支持实时渲染、Mermaid 图表与主题切换的 Markdown 桌面工具",
   "main": "./out/main/index.js",
   "author": "Aides",
@@ -17,6 +17,7 @@
     "test": "vitest run",
     "lint": "eslint src scripts --no-warn-ignored",
     "sync-version": "node scripts/sync-version.mjs",
+    "sync-ux": "node scripts/sync-ux.mjs",
     "check:commands": "node scripts/check-commands.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
     "dist": "electron-vite build && electron-builder --win",

@@ -91,7 +91,10 @@
 
 `window.mdreader` 的每个方法与事件通道**必须**同时存在于 `src/preload/index.js` 与
 `src/renderer/src/api/tauri-mdreader.js`，且方法名/参数/返回结构一致。
-渲染层调用任何 `window.mdreader.*` 前若不确定两端是否实现，用可选调用（`?.`）防御。
+第三端 `src/renderer/src/api/web-mdreader.js`（纯浏览器演示版，GitHub Pages 用）提供
+同契约的降级实现（虚拟文档存 localStorage、导出走下载、原生能力返回不可用语义），
+新增/修改接口时三端同步。渲染层调用任何 `window.mdreader.*` 前若不确定两端是否实现，
+用可选调用（`?.`）防御。
 
 **教训**：`onDropImage` 曾只在 Tauri 适配器实现，App.vue 挂载时无条件调用导致 Electron 下
 `disposers.push(...)` 中途抛错，其后的 `onRequestSaveExit` 永远注册不上——关闭窗口时主进程
@@ -102,3 +105,13 @@
 - 一切 `save/saveAs/exportSave` 调用必须捕获错误并给出用户可见提示（vditor tip 或弹窗）；
   `saveAllAndExit` 在任一保存失败或被取消时**必须停留**，禁止 `finally { requestExit() }`。
 - 落盘一律走双端的原子写（同目录临时文件 + rename），不要直接 `fs.write` 覆盖原文档。
+
+## GitHub Pages 与 vendor/uxkit
+
+- `@ux/*` 本地开发直连 `../UX-FRW`；CI/Pages 环境没有该仓库，回退 `vendor/uxkit/`
+  （`scripts/ux-aliases.mjs` 决定，`FORCE_VENDORED_UX=1` 可本地强制验证 CI 行为）。
+  改动 UX-FRW 后必须 `npm run sync-ux` 刷新 vendor 副本并提交，否则线上构建用的是旧源码。
+- Pages 构建（`.github/workflows/pages.yml`）：`WEB_BASE=/<repo>/app/ npm run build:web`，
+  应用部署在项目站 `/app/` 子路径。**引用 public/ 资源一律走 `utils/assets.js#publicPath`**
+  （vditor cdn、content-theme、欢迎文档图片已是此模式），硬编码 `./vditor` 在子路径下会 404。
+- 官网落地页在 `website/index.html`（纯静态、自包含，不参与 check:tokens 检查范围）。

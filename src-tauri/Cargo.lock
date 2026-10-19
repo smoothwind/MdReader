@@ -2017,7 +2017,7 @@ dependencies = [
 
 [[package]]
 name = "mdreader"
-version = "0.2.3"
+version = "0.3.0-beta.1"
 dependencies = [
  "base64 0.22.1",
  "serde",

@@ -31,6 +31,7 @@ import {
   findHit
 } from '../utils/dom-blocks'
 import { dataUrlToBytes, svgToPngBytes, exportBytes } from '../utils/exporters'
+import { publicPath } from '../utils/assets'
 // @ts-ignore
 import changelogMd from '../../../../CHANGELOG.md?raw'
 const MindMapEditor = defineAsyncComponent(() => import('./MindMapEditor.vue'))
@@ -1021,7 +1022,7 @@ function onEditorContextMenu(e) {
 onMounted(() => {
   vditor = new Vditor(host.value, {
     mode: 'wysiwyg',
-    cdn: './vditor',
+    cdn: publicPath('./vditor'),
     lang: 'zh_CN',
     height: '100%',
     value: getActive()?.content ?? welcomeDoc,
@@ -1033,7 +1034,7 @@ onMounted(() => {
       delay: 100,
       theme: {
         current: props.theme,
-        path: './vditor/dist/css/content-theme'
+        path: publicPath('./vditor/dist/css/content-theme')
       },
       hljs: {
         style: codeStyle(props.theme),
