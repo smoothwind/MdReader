@@ -9,3 +9,4 @@ src-tauri/gen/
 *.log
 .DS_Store
 .playwright-mcp/
+release-notes.md
