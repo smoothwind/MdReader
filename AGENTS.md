@@ -73,6 +73,11 @@
 - Tauri 单实例转发窗口（`{identifier}-sic`）存在属正常现象
 - 渲染型块的"由输入触发的自动渲染"来自 Vditor 内建管线，只能通过隐藏面板 + 失焦渲染来门控，
   无法从外部拦截其内部调用
+- `xlsx`（SheetJS 0.18.5，npm 上最后版本）只用于**导出** `.xlsx`（不解析外部文件），且已改为
+  动态 `import('xlsx')` 不进主包；如需升级须走 SheetJS 官方 CDN 源，并重新评估 CVE（读取场景才有风险）
+- 并发/日志：Tauri 侧互斥锁一律用 `lock_ok()`（中毒容错，release `panic="abort"` 下 `unwrap` 会直接杀进程）；
+  阻塞式对话框只能出现在 `async` command 中（同步 command 阻塞主线程）；渲染层日志超 2MB 轮转为
+  `mdreader.log.1`
 
 ## 设计令牌（强约束，CI 拦截）
 

@@ -25,6 +25,17 @@ export default defineConfig({
   build: {
     outDir: '../../dist-web',
     emptyOutDir: true,
-    target: 'chrome110'
+    target: 'chrome110',
+    rollupOptions: {
+      output: {
+        // 大依赖分包：首屏可并行加载，且版本未变时命中缓存（vditor 最大且很少变动）
+        manualChunks(id) {
+          if (id.includes('node_modules/vditor')) return 'vditor'
+          if (id.includes('node_modules/echarts') || id.includes('node_modules/zrender')) return 'echarts'
+          if (id.includes('node_modules/xlsx')) return 'xlsx'
+          return undefined
+        }
+      }
+    }
   }
 })

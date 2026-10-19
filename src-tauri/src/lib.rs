@@ -11,10 +11,24 @@ use tauri_plugin_opener::OpenerExt;
 use base64::Engine;
 use sysinfo::System;
 
+/// 互斥锁容错取值：release 下 `panic = "abort"`，一旦持锁线程 panic 导致锁中毒，
+/// `lock().unwrap()` 会让整个应用直接崩溃。中毒时取回锁内数据继续工作，避免级联崩溃。
+trait LockExt<T> {
+    fn lock_ok(&self) -> std::sync::MutexGuard<'_, T>;
+}
+
+impl<T> LockExt<T> for Mutex<T> {
+    fn lock_ok(&self) -> std::sync::MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
 const APP_NAME: &str = "MdReader";
 const MD_EXTS: [&str; 4] = ["md", "markdown", "mdown", "mkd"];
 const RECENT_MAX: usize = 12;
 const FILE_POLL_MS: u64 = 2000;
+/// 渲染层日志上限，超过则轮转为 mdreader.log.1（避免长期运行无限增长）
+const LOG_MAX_BYTES: u64 = 2 * 1024 * 1024;
 
 static INITIAL_FILE: OnceLock<Option<String>> = OnceLock::new();
 
@@ -212,9 +226,9 @@ fn set_doc_title(app: &AppHandle, dirty: bool, file_name: &str) {
 
 fn build_menu(app: &AppHandle) -> tauri::Result<()> {
     let state = app.state::<AppState>();
-    let theme = state.prefs.lock().unwrap().theme.clone();
-    let has_file = state.doc.lock().unwrap().file_path.is_some();
-    let recent = state.recent.lock().unwrap().clone();
+    let theme = state.prefs.lock_ok().theme.clone();
+    let has_file = state.doc.lock_ok().file_path.is_some();
+    let recent = state.recent.lock_ok().clone();
 
     let file = tauri::menu::Submenu::with_id(app, "m-file", "文件", true)?;
     let recent_menu = tauri::menu::Submenu::with_id(app, "m-recent", "最近打开", true)?;
@@ -290,7 +304,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<()> {
     ])?;
 
     let view = tauri::menu::Submenu::with_id(app, "m-view", "视图", true)?;
-    let show_tree = state.prefs.lock().unwrap().show_file_tree;
+    let show_tree = state.prefs.lock_ok().show_file_tree;
     let doc_source = tauri::menu::MenuItem::with_id(app, "view-doc-source", "查看全文 Markdown", true, None::<&str>)?;
     let file_tree = tauri::menu::CheckMenuItem::with_id(app, "view-file-tree", "文件树", true, show_tree, None::<&str>)?;
     let sep1 = tauri::menu::PredefinedMenuItem::separator(app)?;
@@ -352,14 +366,14 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
     let state = app.state::<AppState>();
     if let Some(rest) = id.strip_prefix("recent-").filter(|r| !r.is_empty()) {
         let idx: usize = rest.parse().unwrap_or(usize::MAX);
-        let path = state.recent.lock().unwrap().get(idx).cloned();
+        let path = state.recent.lock_ok().get(idx).cloned();
         if let Some(p) = path {
             let _ = app.emit("doc:open-recent", p);
         }
         return;
     }
     if id == "file-reveal" {
-        let path = state.doc.lock().unwrap().file_path.clone();
+        let path = state.doc.lock_ok().file_path.clone();
         if let Some(p) = path {
             let _ = app.opener().reveal_item_in_dir(&p);
         }
@@ -371,7 +385,7 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
     }
     if id == "zoom-in" || id == "zoom-out" || id == "zoom-reset" {
         if let Some(w) = main_window(app) {
-            let mut z = state.zoom.lock().unwrap();
+            let mut z = state.zoom.lock_ok();
             *z = match id.as_ref() {
                 "zoom-in" => (*z + 0.1).min(3.0),
                 "zoom-out" => (*z - 0.1).max(0.5),
@@ -401,7 +415,7 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
     }
     if id == "theme-light" || id == "theme-dark" {
         let t = if id == "theme-dark" { "dark" } else { "light" };
-        state.prefs.lock().unwrap().theme = t.to_string();
+        state.prefs.lock_ok().theme = t.to_string();
         if let Some(w) = main_window(app) {
             let _ = w.set_theme(Some(if t == "dark" { Theme::Dark } else { Theme::Light }));
         }
@@ -443,7 +457,7 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
 // ---------- commands ----------
 
 #[tauri::command]
-fn open_file_dialog(app: AppHandle) -> Result<serde_json::Value, String> {
+async fn open_file_dialog(app: AppHandle) -> Result<serde_json::Value, String> {
     let picked = app
         .dialog()
         .file()
@@ -489,7 +503,7 @@ fn set_watch_paths(state: State<AppState>, paths: Vec<String>) {
     let mut list: Vec<String> = paths.into_iter().filter(|p| !p.is_empty()).collect();
     list.sort();
     list.dedup();
-    *state.watch_paths.lock().unwrap() = list;
+    *state.watch_paths.lock_ok() = list;
 }
 
 /// 渲染层错误日志落盘（userData/logs/mdreader.log）
@@ -507,10 +521,15 @@ fn append_log(app: AppHandle, level: String, message: String, stack: Option<Stri
         message,
         stack.map(|s| format!("\n{s}")).unwrap_or_default()
     );
+    let file = dir.join("mdreader.log");
+    if fs::metadata(&file).map(|m| m.len() > LOG_MAX_BYTES).unwrap_or(false) {
+        let _ = fs::remove_file(dir.join("mdreader.log.1"));
+        let _ = fs::rename(&file, dir.join("mdreader.log.1"));
+    }
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(dir.join("mdreader.log"))
+        .open(&file)
     {
         let _ = writeln!(f, "{line}");
     }
@@ -525,7 +544,7 @@ fn save_file(app: AppHandle, path: String, content: String) -> Result<serde_json
 }
 
 #[tauri::command]
-fn save_file_as(app: AppHandle, content: String, name: Option<String>) -> Result<serde_json::Value, String> {
+async fn save_file_as(app: AppHandle, content: String, name: Option<String>) -> Result<serde_json::Value, String> {
     let picked = app
         .dialog()
         .file()
@@ -549,7 +568,7 @@ fn save_file_as(app: AppHandle, content: String, name: Option<String>) -> Result
 }
 
 #[tauri::command]
-fn export_save(
+async fn export_save(
     app: AppHandle,
     data: String,
     name: Option<String>,
@@ -585,7 +604,7 @@ fn report_state(
 ) {
     let normalized = file_path.filter(|p| !p.is_empty());
     let prev_path = {
-        let mut d = state.doc.lock().unwrap();
+        let mut d = state.doc.lock_ok();
         let prev = d.file_path.clone();
         d.dirty = dirty;
         d.any_dirty = any_dirty;
@@ -593,7 +612,7 @@ fn report_state(
         d.file_name = file_name.unwrap_or_default();
         prev
     };
-    let d = state.doc.lock().unwrap();
+    let d = state.doc.lock_ok();
     set_doc_title(&app, d.dirty, &d.file_name);
     drop(d);
     // 菜单仅依赖 file_path（reveal 可用性），避免每次 dirty 翻转都重建
@@ -604,7 +623,7 @@ fn report_state(
 
 #[tauri::command]
 fn request_exit(app: AppHandle, state: State<AppState>) {
-    *state.exiting.lock().unwrap() = true;
+    *state.exiting.lock_ok() = true;
     if let Some(w) = main_window(&app) {
         let _ = w.close();
     } else {
@@ -619,7 +638,7 @@ fn relaunch_app(app: AppHandle) {
 
 #[tauri::command]
 fn set_theme_source(app: AppHandle, state: State<AppState>, theme: String) -> String {
-    state.prefs.lock().unwrap().theme = theme.clone();
+    state.prefs.lock_ok().theme = theme.clone();
     if let Some(w) = main_window(&app) {
         let _ = w.set_theme(Some(if theme == "dark" { Theme::Dark } else { Theme::Light }));
     }
@@ -629,7 +648,7 @@ fn set_theme_source(app: AppHandle, state: State<AppState>, theme: String) -> St
 
 #[tauri::command]
 fn report_theme(app: AppHandle, state: State<AppState>, theme: String) {
-    state.prefs.lock().unwrap().theme = theme.clone();
+    state.prefs.lock_ok().theme = theme.clone();
     if let Some(w) = main_window(&app) {
         let _ = w.set_theme(Some(if theme == "dark" { Theme::Dark } else { Theme::Light }));
     }
@@ -680,7 +699,7 @@ fn open_local_link(app: AppHandle, href: String, doc_path: Option<String>) -> se
 fn get_perf_config(app: AppHandle, state: State<AppState>) -> PerfConfig {
     let mut cfg = load_perf_config(&app);
     {
-        let mut p = state.perf.lock().unwrap();
+        let mut p = state.perf.lock_ok();
         *p = cfg.clone();
     }
     // WebView2 下进程级选项由系统 WebView 管理，此处仅持久化展示
@@ -696,7 +715,7 @@ fn set_perf_config(app: AppHandle, state: State<AppState>, cfg: PerfConfig) -> P
         max_old_space_size: cfg.max_old_space_size,
     };
     save_perf_config(&app, &merged);
-    *state.perf.lock().unwrap() = merged.clone();
+    *state.perf.lock_ok() = merged.clone();
     merged
 }
 
@@ -770,7 +789,7 @@ fn save_image_asset(
 }
 
 #[tauri::command]
-fn open_folder_dialog(app: AppHandle) -> Result<serde_json::Value, String> {
+async fn open_folder_dialog(app: AppHandle) -> Result<serde_json::Value, String> {
     let picked = app.dialog().file().blocking_pick_folder();
     let Some(file) = picked else {
         return Ok(json!({ "canceled": true }));
@@ -871,7 +890,7 @@ fn export_pdf() -> serde_json::Value {
 /// 文件树开关同步到菜单勾选态
 #[tauri::command]
 fn report_file_tree(app: AppHandle, state: State<AppState>, on: bool) {
-    state.prefs.lock().unwrap().show_file_tree = on;
+    state.prefs.lock_ok().show_file_tree = on;
     let _ = build_menu(&app);
 }
 
@@ -883,7 +902,7 @@ fn poll_loop(app: AppHandle) {
         std::thread::sleep(Duration::from_millis(FILE_POLL_MS));
         let paths = {
             let state = app.state::<AppState>();
-            let watch = state.watch_paths.lock().unwrap();
+            let watch = state.watch_paths.lock_ok();
             watch.clone()
         };
         for p in paths {
@@ -918,7 +937,7 @@ fn get_metrics() -> serde_json::Value {
     let me = std::process::id();
     let r2 = |v: f32| (v * 100.0).round() / 100.0;
     let mut processes: Vec<serde_json::Value> = Vec::new();
-    let mut peaks = peaks().lock().unwrap();
+    let mut peaks = peaks().lock_ok();
     for (pid, proc_) in sys.processes() {
         let pid_u32 = pid.as_u32();
         let is_self = pid_u32 == me;
@@ -1055,7 +1074,7 @@ pub fn run() {
             }
             {
                 let state = handle.state::<AppState>();
-                *state.recent.lock().unwrap() = load_recent(&handle);
+                *state.recent.lock_ok() = load_recent(&handle);
             }
             build_menu(&handle)?;
 
@@ -1113,7 +1132,7 @@ pub fn run() {
             } = event
             {
                 let state = app.state::<AppState>();
-                let exiting = *state.exiting.lock().unwrap();
+                let exiting = *state.exiting.lock_ok();
                 if exiting {
                     return;
                 }

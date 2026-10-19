@@ -32,8 +32,6 @@ import {
 } from '../utils/dom-blocks'
 import { dataUrlToBytes, svgToPngBytes, exportBytes } from '../utils/exporters'
 import { publicPath } from '../utils/assets'
-// @ts-ignore
-import changelogMd from '../../../../CHANGELOG.md?raw'
 const MindMapEditor = defineAsyncComponent(() => import('./MindMapEditor.vue'))
 
 const props = defineProps({
@@ -48,7 +46,6 @@ const HIT_PAD_PX = 14
 const LINK_HOVER_MS = 120
 const TOC_DEBOUNCE_MS = 150
 const SCROLL_SETTLE_MS = 150
-const MM_POLL_MS = 500
 const BIG_DOC_CHARS = 200000
 const BIG_DOC_HINT_COOLDOWN_MS = 60000
 
@@ -65,6 +62,9 @@ let hideTimer = null
 let linkHoverTimer = null
 let tocTimer = null
 let scrollTimer = null
+let scrollRaf = 0
+// 表格样式映射缓存：避免每次 DOM 变更都同步读 localStorage + JSON.parse
+let styleMapCache = { key: null, map: null }
 const lastMouse = { x: 0, y: 0, seen: false }
 let pendingScroll = 0
 
@@ -696,17 +696,24 @@ function styleStoreKey() {
 }
 
 function readStyleMap() {
+  const key = styleStoreKey()
+  if (styleMapCache.key === key && styleMapCache.map) return styleMapCache.map
+  let map
   try {
-    return JSON.parse(localStorage.getItem(styleStoreKey()) || '{}') || {}
+    map = JSON.parse(localStorage.getItem(key) || '{}') || {}
   } catch {
-    return {}
+    map = {}
   }
+  styleMapCache = { key, map }
+  return map
 }
 
 function applyRememberedStyles() {
   const root = rootEl()
   if (!root) return
   const map = readStyleMap()
+  // 无历史样式且当前表格未带样式类：直接跳过（避免每次输入都全量比对）
+  if (!Object.keys(map).length && !root.querySelector('table[class*="md-tbl-"]')) return
   root.querySelectorAll('table').forEach((t, i) => {
     const name = map[i] || DEFAULT_TABLE_STYLE
     TABLE_STYLES.forEach(({ name: n }) => {
@@ -820,9 +827,15 @@ function openSearch(withReplace) {
 }
 
 function onDocScroll() {
+  // 滚动高频：合帧执行重绘相关逻辑，避免每个 scroll 事件都触发布局读取
+  if (!scrollRaf) {
+    scrollRaf = requestAnimationFrame(() => {
+      scrollRaf = 0
+      updateCodeBadge()
+      mmUpdate()
+    })
+  }
   clearTimeout(scrollTimer)
-  updateCodeBadge()
-  mmUpdate()
   scrollTimer = setTimeout(() => {
     tocApi.updateActiveHeading()
     reevaluateBar()
@@ -836,7 +849,7 @@ const codeBadge = reactive({ visible: false, top: 0, right: 0, lang: '', icon: n
 
 const mmCtl = reactive({ pct: 100 })
 let mmPanelEl = null
-let mmTimer = null
+let mmObserver = null
 const mmInitial = new WeakMap()
 
 function mmSvgOf(panel) {
@@ -868,14 +881,14 @@ function mmUpdate() {
   const svg = mmSvgOf(panel)
   if (!svg) {
     mmPanelEl = null
-    clearInterval(mmTimer)
     return
   }
   mmInit(svg)
   mmPanelEl = panel
   const cur = mmParseTf(mmGOf(svg)?.getAttribute('transform'))
   const init = mmParseTf(mmInitial.get(svg))
-  mmCtl.pct = Math.round((cur.s / (init.s || 1)) * 100)
+  const pct = Math.round((cur.s / (init.s || 1)) * 100)
+  if (pct !== mmCtl.pct) mmCtl.pct = pct
 }
 
 function mmZoom(dir) {
@@ -912,16 +925,19 @@ function mmReset() {
   mmCtl.pct = 100
 }
 
+// markmap 缩放由内部 panzoom 直接改写 <g transform>：属性观察替代 500ms 轮询
 watch(
   () => bar.visible && bar.type === 'markmap' && !!bar.el,
   (v) => {
-    clearInterval(mmTimer)
-    if (v) {
-      mmUpdate()
-      mmTimer = setInterval(mmUpdate, MM_POLL_MS)
-    } else {
+    mmObserver?.disconnect()
+    mmObserver = null
+    if (!v) {
       mmPanelEl = null
+      return
     }
+    mmObserver = new MutationObserver(() => mmUpdate())
+    mmObserver.observe(bar.el, { subtree: true, attributes: true, attributeFilter: ['transform'] })
+    mmUpdate()
   }
 )
 
@@ -1166,7 +1182,10 @@ function showDocSource() {
   openSourceLayer('全文 Markdown 源码（只读）', vditor.getValue())
 }
 
-function showChangelog() {
+async function showChangelog() {
+  // 按需加载：更新日志不应进入主包（首屏体积）
+  // @ts-ignore
+  const { default: changelogMd } = await import('../../../../CHANGELOG.md?raw')
   openSourceLayer('更新日志', (changelogMd || '').trim())
 }
 
@@ -1249,6 +1268,7 @@ function insertMindmap() {
 
 onBeforeUnmount(() => {
   if (styleObserver) styleObserver.disconnect()
+  mmObserver?.disconnect()
   host.value?.removeEventListener?.('paste', onEditorPaste, true)
   window.removeEventListener('scroll', onDocScroll, true)
   window.removeEventListener('keydown', onGlobalKeydown, true)
@@ -1257,6 +1277,7 @@ onBeforeUnmount(() => {
   clearTimeout(hideTimer)
   clearTimeout(tocTimer)
   clearTimeout(scrollTimer)
+  if (scrollRaf) cancelAnimationFrame(scrollRaf)
   searchApi.dispose()
   selectionBarApi.dispose()
   if (vditor) vditor.destroy()

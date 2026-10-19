@@ -6,17 +6,39 @@ import { store } from '../store'
  */
 export function useToc({ getRootEl }) {
   let headingSeq = 0
+  let lastSignature = ''
   const headingEls = new Map()
 
   function extractToc() {
     const root = getRootEl()
     if (!root) return
-    headingEls.clear()
-    const items = []
-    root.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((h) => {
+    const headings = [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')]
+    const sigParts = []
+    const texts = []
+    headings.forEach((h) => {
       const clone = h.cloneNode(true)
       clone.querySelectorAll('.vditor-wysiwyg__marker').forEach((m) => m.remove())
       const text = clone.textContent.replace(/\u200b/g, '').replace(/\s+/g, ' ').trim()
+      texts.push(text)
+      sigParts.push(h.tagName + '\u0001' + text)
+    })
+    const signature = sigParts.join('\u0002')
+    const nonEmpty = texts.filter(Boolean).length
+    // 标题结构未变化（键入正文是常态）时仅刷新活跃项：
+    // 不重建 Map、不替换 store.toc，避免目录面板整表重渲染
+    if (
+      signature === lastSignature &&
+      headingEls.size === nonEmpty &&
+      [...headingEls.values()].every((el) => el.isConnected)
+    ) {
+      updateActiveHeading()
+      return
+    }
+    lastSignature = signature
+    headingEls.clear()
+    const items = []
+    headings.forEach((h, i) => {
+      const text = texts[i]
       if (!text) return
       const id = 'h' + ++headingSeq
       headingEls.set(id, h)
