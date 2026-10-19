@@ -1,0 +1,10 @@
+﻿node_modules/
+out/
+release/
+dist-web/
+src/renderer/public/vditor/
+src-tauri/target/
+src-tauri/gen/
+.idea/
+*.log
+.DS_Store

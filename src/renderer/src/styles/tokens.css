@@ -1,0 +1,202 @@
+/**
+ * tokens.css — 设计令牌层（单一来源）
+ *
+ * 分层：基础层(具体值) -> 语义层(用途命名) -> 旧名别名(兼容存量引用)
+ * 规则：
+ *   1. 组件/页面样式只允许消费语义层或旧名别名，禁止直接消费基础层
+ *   2. 主题适配只允许发生在本文件的 data-theme 翻转块内
+ *   3. 新增值先在这里登记令牌，再在样式中引用（见 AGENTS.md 设计令牌规则）
+ *   4. 本项目间距/圆角/字号令牌采用"值对齐"命名（--tk-sp-6 = 6px），
+ *      保证迁移零像素偏移；新增样式优先取已有档位
+ */
+
+/* ============================================================
+ * 一、基础层 Primitives（原始调色板，仅本文件内部消费）
+ * ============================================================ */
+:root {
+  --tk-gray-0: #ffffff;
+  --tk-gray-50: #f6f8fa;
+  --tk-gray-600: #6a7381;
+  --tk-gray-800: #1f2328;
+  --tk-gray-900: #12151f;
+
+  --tk-navy-800: #1f2430;
+  --tk-navy-700: #272e3d;
+  --tk-navy-600: #363e52;
+
+  --tk-indigo-500: #4c6ef5;
+  --tk-indigo-350: #7c93f6;
+
+  --tk-green-600: #2da44e;
+  --tk-green-500: #57c274;
+  --tk-green-700: #2f9e44;
+  --tk-red-600: #e03131;
+}
+
+/* ============================================================
+ * 二、语义层 Semantic（组件样式唯一允许消费的层）
+ * ============================================================ */
+:root {
+  /* 文本 */
+  --tk-fg: var(--tk-gray-800);
+  --tk-fg-soft: var(--tk-gray-600);
+  --tk-fg-inverse: var(--tk-gray-0);
+
+  /* 背景 */
+  --tk-bg-app: var(--tk-gray-0);
+  --tk-bg-panel: var(--tk-gray-50);
+
+  /* 边框 */
+  --tk-border: #d5dbe3;
+
+  /* 交互 */
+  --tk-accent: var(--tk-indigo-500);
+  --tk-accent-fg: var(--tk-gray-0);
+
+  /* 功能语义 */
+  --tk-success: var(--tk-green-600); /* 保存状态等，随主题切换 */
+  --tk-success-fixed: var(--tk-green-700); /* 锚点校验 ok，双主题恒定 */
+  --tk-danger: var(--tk-red-600); /* 锚点校验 bad / CPU 曲线，双主题恒定 */
+
+  /* 阴影（浅深主题共用，与迁移前一致） */
+  --tk-sh-1: 0 1px 4px rgba(0, 0, 0, 0.05);
+  --tk-sh-2: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --tk-sh-3: 0 2px 10px rgba(0, 0, 0, 0.12);
+  --tk-sh-4: 0 4px 16px rgba(0, 0, 0, 0.16);
+  --tk-sh-5: 0 4px 16px rgba(0, 0, 0, 0.2);
+  --tk-sh-6: 0 8px 24px rgba(0, 0, 0, 0.22);
+  --tk-sh-7: 0 12px 40px rgba(0, 0, 0, 0.3);
+  --tk-sh-8: 0 12px 48px rgba(0, 0, 0, 0.3);
+  --tk-sh-spotlight: 0 0 0 9999px rgba(0, 0, 0, 0.55); /* 聚光遮罩环 */
+
+  /* 字号（值对齐档位） */
+  --tk-fs-11: 11px;
+  --tk-fs-12: 12px;
+  --tk-fs-125: 12.5px;
+  --tk-fs-13: 13px;
+  --tk-fs-14: 14px;
+  --tk-fs-18: 18px;
+
+  /* 圆角（值对齐档位） */
+  --tk-rd-2: 2px;
+  --tk-rd-4: 4px;
+  --tk-rd-5: 5px;
+  --tk-rd-6: 6px;
+  --tk-rd-7: 7px;
+  --tk-rd-8: 8px;
+  --tk-rd-10: 10px;
+
+  /* 间距（值对齐档位，4px 网格为主的 2px 细分档） */
+  --tk-sp-2: 2px;
+  --tk-sp-3: 3px;
+  --tk-sp-4: 4px;
+  --tk-sp-5: 5px;
+  --tk-sp-6: 6px;
+  --tk-sp-7: 7px;
+  --tk-sp-8: 8px;
+  --tk-sp-10: 10px;
+  --tk-sp-12: 12px;
+  --tk-sp-14: 14px;
+  --tk-sp-16: 16px;
+
+  /* 层级（保持迁移前相对顺序，1:1 映射） */
+  --tk-z-local: 20; /* 面板内局部浮层 */
+  --tk-z-local-top: 21;
+  --tk-z-dock: 900; /* 底部停靠条 */
+  --tk-z-pop: 960; /* 悬浮工具条 */
+  --tk-z-pop-front: 980;
+  --tk-z-top: 999;
+  --tk-z-hover: 1000; /* hover 弹层 */
+  --tk-z-hover-front: 1001;
+  --tk-z-modal: 2000;
+  --tk-z-menu: 2100; /* 右键菜单 */
+  --tk-z-dropdown: 2200; /* 下拉菜单 */
+  --tk-z-tour: 2600; /* 漫游指导 */
+  --tk-z-tour-spotlight: 3000; /* 漫游聚光遮罩 */
+}
+
+/* ============================================================
+ * 三、主题翻转（唯一的暗色适配点）
+ * ============================================================ */
+:root[data-theme='dark'] {
+  --tk-fg: #e6e9f0;
+  --tk-fg-soft: #97a1b5;
+  --tk-bg-app: var(--tk-navy-800);
+  --tk-bg-panel: var(--tk-navy-700);
+  --tk-border: var(--tk-navy-600);
+  --tk-accent: var(--tk-indigo-350);
+  --tk-accent-fg: var(--tk-navy-800);
+  --tk-success: var(--tk-green-500);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* ============================================================
+ * 四、旧名别名（兼容存量 --bg 系引用，勿在新代码中使用）
+ * ============================================================ */
+:root {
+  --bg: var(--tk-bg-app);
+  --bg-soft: var(--tk-bg-panel);
+  --fg: var(--tk-fg);
+  --fg-soft: var(--tk-fg-soft);
+  --border: var(--tk-border);
+  --accent: var(--tk-accent);
+  --accent-fg: var(--tk-accent-fg);
+}
+
+
+/* ============================================================
+ * 五、语言徽标色（代码块徽标图标/点缀，双主题色对）
+ * 校验口径：WCAG 1.4.11 非文本对比度，对 #ffffff/#f6f8fa/#1f2430/#272e3d
+ * 四种实际底色实测 ≥3.3:1；数据单一来源 codeblock-icons/.gen.json
+ * ============================================================ */
+:root {
+  --lang-js: #A4850A;
+  --lang-ts: #4B8BD2;
+  --lang-python: #4B8EC5;
+  --lang-java: #D96900;
+  --lang-c: #618EAA;
+  --lang-cpp: #4F8CCC;
+  --lang-csharp: #BE64D5;
+  --lang-go: #0094B9;
+  --lang-rust: #D76750;
+  --lang-php: #8184B8;
+  --lang-ruby: #DE615C;
+  --lang-swift: #E45E3F;
+  --lang-kotlin: #946FFF;
+  --lang-html: #E1603E;
+  --lang-css: #1A8DE2;
+  --lang-yaml: #818997;
+  --lang-markdown: #6380F6;
+  --json: #818997;
+  --database: #0094B9;
+  --terminal: #2B9C4A;
+  --mermaid: #BC66D2;
+}
+
+:root[data-theme='dark'] {
+  --lang-js: #967B09;
+  --lang-ts: #3880CE;
+  --lang-python: #3C82BC;
+  --lang-java: #C76000;
+  --lang-c: #55839E;
+  --lang-cpp: #3C80C7;
+  --lang-csharp: #B652D0;
+  --lang-go: #0088AA;
+  --lang-rust: #D2553A;
+  --lang-php: #7479B2;
+  --lang-ruby: #D94D46;
+  --lang-swift: #E04823;
+  --lang-kotlin: #885FFF;
+  --lang-html: #DD4B23;
+  --lang-css: #1882CF;
+  --lang-yaml: #747E8D;
+  --lang-markdown: #5273F5;
+  --json: #747E8D;
+  --database: #0088AA;
+  --terminal: #278F44;
+  --mermaid: #B554CC;
+}

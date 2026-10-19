@@ -1,0 +1,44 @@
+<script setup>
+import { ref } from 'vue'
+import { store } from '../store'
+import { ChevronsRight } from 'lucide-vue-next'
+
+defineEmits(['jump'])
+
+const collapsed = ref(localStorage.getItem('mdreader:toc-collapsed') === '1')
+
+function toggle() {
+  collapsed.value = !collapsed.value
+  try {
+    localStorage.setItem('mdreader:toc-collapsed', collapsed.value ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
+</script>
+
+<template>
+  <div v-if="store.toc.length">
+    <div v-if="!collapsed" class="toc-panel">
+      <div class="toc-head">
+        <span>目录</span>
+        <button class="toc-toggle" title="收起目录" @click="toggle">
+          <ChevronsRight :size="14" />
+        </button>
+      </div>
+      <div class="toc-body">
+        <button
+          v-for="item in store.toc"
+          :key="item.id"
+          class="toc-item"
+          :class="['lv' + item.level, { active: item.id === store.tocActiveId }]"
+          :title="item.text"
+          @click="$emit('jump', item.id)"
+        >
+          {{ item.text }}
+        </button>
+      </div>
+    </div>
+    <button v-else class="toc-collapsed-btn" title="展开目录" @click="toggle">目录</button>
+  </div>
+</template>
