@@ -23,32 +23,32 @@
   background: transparent;
 }
 
+/* 打印：仅输出离屏打印根（A4 版式，PDF 与系统打印共用） */
 @media print {
-  .tabbar,
-  .statusbar,
-  .toc-panel,
-  .toc-collapsed-btn,
-  .md-block-bar,
-  .selbar,
-  .search-panel {
+  #app {
     display: none !important;
   }
 
-  .app,
-  .editor-wrap,
-  .editor-host,
-  .editor,
-  .vditor,
-  .vditor-content,
-  .vditor-wysiwyg,
-  .vditor-reset {
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
+  .md-block-bar,
+  .selbar,
+  .search-panel,
+  .md-code-badge,
+  .update-banner {
+    display: none !important;
   }
 
-  :root {
-    color-scheme: light;
+  html,
+  body {
+    height: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    background: var(--tk-gray-0) !important;
+  }
+
+  #md-print-root {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
   }
 }
 
@@ -274,6 +274,39 @@
 
 .about-note-err {
   color: var(--tk-danger);
+}
+
+.export-img-box {
+  width: min(420px, 92vw);
+}
+
+.export-img-note {
+  margin: 0 0 var(--tk-sp-10);
+  font-size: var(--tk-fs-12);
+  color: var(--tk-fg-soft);
+}
+
+.export-img-row {
+  display: flex;
+  align-items: center;
+  gap: var(--tk-sp-8);
+  margin-bottom: var(--tk-sp-10);
+  font-size: var(--tk-fs-13);
+  color: var(--tk-fg);
+}
+
+.export-img-num {
+  width: 64px;
+  padding: var(--tk-sp-4) var(--tk-sp-6);
+  font-size: var(--tk-fs-13);
+  color: var(--tk-fg);
+  background: var(--tk-bg-app);
+  border: 1px solid var(--tk-border);
+  border-radius: var(--tk-rd-6);
+}
+
+.export-img-num:disabled {
+  opacity: 0.5;
 }
 
 .update-banner {

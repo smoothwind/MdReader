@@ -2,11 +2,10 @@ import { dataUrlToBytes, svgToPngBytes, exportBytes } from '../utils/exporters'
 import { codeBlockText } from '../utils/dom-blocks'
 
 /**
- * 块级导出：代码块 / 表格 / 图表 PNG、表格 Excel、整篇长图。
+ * 块级导出：代码块 / 表格 / 图表 PNG、表格 Excel。
  * 依赖注入（均由宿主 EditorPane 提供）：
  *  - resolveTable / resolveMermaidPanel / resolveCodeBlock：按工具条索引定位目标元素
  *  - getBar：悬浮工具条状态（语言、序号用于命名文件）
- *  - getRootEl：编辑器根元素（整篇长图取 .vditor-wysiwyg）
  *  - baseName：导出文件名前缀；themeBg：主题背景色；notify：提示
  */
 export function useBlockExports({
@@ -14,7 +13,6 @@ export function useBlockExports({
   resolveMermaidPanel,
   resolveCodeBlock,
   getBar,
-  getRootEl,
   baseName,
   themeBg,
   notify
@@ -120,47 +118,12 @@ export function useBlockExports({
     return exportDiagramPng('markmap')
   }
 
-  /** 整篇长图：渲染内容整体导出 PNG（按内容高度自适应缩放，规避浏览器 Canvas 高度上限） */
-  async function exportDocImage(baseTitle) {
-    const target = getRootEl()?.querySelector('.vditor-wysiwyg')
-    if (!target) {
-      notify('编辑器未就绪')
-      return false
-    }
-    try {
-      const { toPng } = await import('html-to-image')
-      const height = target.scrollHeight || 1
-      // Chrome Canvas 高度上限约 32767px；超过时降低 pixelRatio 保证导出成功
-      const MAX_CANVAS_PX = 16000
-      const pixelRatio = Math.max(1, Math.min(2, MAX_CANVAS_PX / height))
-      const dataUrl = await toPng(target, {
-        pixelRatio,
-        backgroundColor: themeBg(),
-        width: target.scrollWidth || undefined,
-        height
-      })
-      const blob = await (await fetch(dataUrl)).blob()
-      const data = new Uint8Array(await blob.arrayBuffer())
-      const r = await window.mdreader.exportSave({
-        data,
-        name: (baseTitle || baseName()) + '.png',
-        ext: 'png',
-        extName: 'PNG 图片'
-      })
-      return !r.canceled
-    } catch {
-      notify('导出失败：文档过长或渲染超限')
-      return false
-    }
-  }
-
   return {
     exportCodeImage,
     exportTableImage,
     exportTableExcel,
     exportDiagramPng,
     exportMermaidPng,
-    exportMarkmapPng,
-    exportDocImage
+    exportMarkmapPng
   }
 }

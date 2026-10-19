@@ -519,7 +519,8 @@ function registerIpc() {
       win.webContents.printToPDF({
         printBackground: true,
         pageSize: 'A4',
-        margins: { top: 0.6, bottom: 0.6, left: 0.6, right: 0.6 }
+        // 0.625in = 60px（@96dpi），与渲染层打印版式 PAGE 常量一致，保证内容水平居中
+        margins: { top: 0.625, bottom: 0.625, left: 0.625, right: 0.625 }
       }),
       30_000,
       '导出超时：渲染进程未响应，请重试'

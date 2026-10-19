@@ -122,14 +122,12 @@ const {
   exportTableImage,
   exportTableExcel,
   exportMermaidPng,
-  exportMarkmapPng,
-  exportDocImage
+  exportMarkmapPng
 } = useBlockExports({
   resolveTable,
   resolveMermaidPanel,
   resolveCodeBlock,
   getBar: () => bar,
-  getRootEl: rootEl,
   baseName,
   themeBg,
   notify
@@ -1029,8 +1027,7 @@ defineExpose({
   execHighlight: () => selectionBarApi.execHighlight(),
   applyColor: (c) => selectionBarApi.applyColor(c),
   applySize: (v) => selectionBarApi.applySize(v),
-  applyFont: (v) => selectionBarApi.applyFont(v),
-  exportDocImage
+  applyFont: (v) => selectionBarApi.applyFont(v)
 })
 </script>
 

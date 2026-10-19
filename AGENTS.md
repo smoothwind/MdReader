@@ -64,6 +64,13 @@
 任何插入到编辑器宿主内的元素（含 button 等带文本的节点）都会被 `getValue()` 序列化进 Markdown。
 注入型 UI 一律放 `teleport`/body（如各工具条、弹层），或确保在序列化前移除。
 
+### 10. 导出 PDF / 长图必须走独立打印版式
+
+- `utils/doc-export.js#mountPrintRoot` 生成离屏打印根（A4 内容宽 674px、`#app` 在 `@media print` 隐藏、body 放开 `overflow:hidden`/`height:100%`）；PDF、系统打印、长图共用，保证页码口径一致
+- **不要**直接对应用 UI 调 `printToPDF` 或截 `.vditor-wysiwyg`：前者受动态内边距/视口宽度影响会溢出裁切、产生空白首页；后者高度等于视口，只能截到当前页
+- 长图按 A4 内容页高 1003px 切页（与 PDF 页码一致），范围为所选页合成一张连续图
+- **html-to-image 无法捕获 `position:fixed` 的离屏元素**（克隆体保留负偏移，foreignObject 内为空白）：捕获前临时改为文档流定位，结束后还原
+
 ## 其他已知限制（勿重复踩坑）
 
 - 原生菜单/托盘菜单/系统文件对话框的样式由操作系统决定，应用内无法主题化

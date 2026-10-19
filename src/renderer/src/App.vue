@@ -14,6 +14,8 @@ import FileTreePanel from './components/FileTreePanel.vue'
 import { IMAGE_RE, stripMdExt } from './utils/file'
 import { idbGet, idbSet } from './utils/idb'
 import { useUpdateCheck } from './composables/useUpdateCheck'
+import { DOC_CSS, mountPrintRoot, waitPrintReady } from './utils/doc-export'
+import { captureLongImage, totalPagesFor } from './utils/long-image'
 
 setupTheme()
 
@@ -289,16 +291,6 @@ function docHtmlBody() {
   return { tab, body, title }
 }
 
-const DOC_CSS = [
-  'body{max-width:860px;margin:32px auto;padding:0 20px;font-family:"Segoe UI","Microsoft YaHei",sans-serif;color:#24292f;line-height:1.7;}',
-  'pre{background:#f6f8fa;padding:12px;border-radius:8px;overflow:auto;}',
-  'code{font-family:Consolas,monospace;}',
-  'table{border-collapse:collapse;}th,td{border:1px solid #d0d7de;padding:6px 12px;}',
-  'img{max-width:100%;}',
-  'blockquote{border-left:4px solid #d0d7de;margin:0;padding:0 16px;color:#57606a;}',
-  'h1,h2,h3,h4{border-bottom:1px solid #eaeef2;padding-bottom:6px;}'
-].join('\n')
-
 async function exportHtml() {
   const { title, body } = docHtmlBody()
   const html = [
@@ -340,11 +332,116 @@ async function exportWord() {
   await exportBytes(new TextEncoder().encode(html), stripMdExt(title) + '.doc', 'doc', 'Word 文档', '已导出 Word 文档')
 }
 
-/** 导出整篇长图（渲染内容整体截图，超长文档受 Canvas 高度限制） */
-async function exportImage() {
-  const { title } = docHtmlBody()
-  const ok = await editorRef.value?.exportDocImage(stripMdExt(title))
-  if (ok) notify('已导出长图')
+// ---------- 导出长图（A4 版式分页，可选全部 / 页码范围） ----------
+const exportImgOpen = ref(false)
+const exportImgBusy = ref(false)
+const exportImgPages = ref(0)
+const exportImgMode = ref('all')
+const exportImgStart = ref(1)
+const exportImgEnd = ref(1)
+const exportImgLayerEl = ref(null)
+let exportImgRoot = null
+let exportImgTitle = ''
+
+async function openExportImageDialog() {
+  const { title, body } = docHtmlBody()
+  if (!body) return notify('文档为空')
+  closeExportImageDialog()
+  exportImgTitle = stripMdExt(title)
+  exportImgRoot = mountPrintRoot(body)
+  try {
+    await waitPrintReady(exportImgRoot.root)
+    exportImgPages.value = totalPagesFor(exportImgRoot.root.scrollHeight)
+  } catch {
+    closeExportImageDialog()
+    return notify('导出失败：内容渲染超限')
+  }
+  exportImgStart.value = 1
+  exportImgEnd.value = exportImgPages.value
+  exportImgMode.value = 'all'
+  exportImgOpen.value = true
+}
+
+function closeExportImageDialog() {
+  exportImgOpen.value = false
+  exportImgRoot?.dispose()
+  exportImgRoot = null
+}
+
+watch(exportImgOpen, (v) => {
+  if (v) nextTick(() => exportImgLayerEl.value?.focus())
+})
+
+async function confirmExportImage() {
+  if (!exportImgRoot) return notify('导出内容已失效，请重试')
+  const all = exportImgMode.value === 'all'
+  const start = all ? 1 : Number(exportImgStart.value)
+  const end = all ? exportImgPages.value : Number(exportImgEnd.value)
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > exportImgPages.value) {
+    return notify(`请输入 1–${exportImgPages.value} 的页码范围`)
+  }
+  exportImgBusy.value = true
+  try {
+    const r = await captureLongImage({ root: exportImgRoot.root, startPage: start, endPage: end })
+    const save = await window.mdreader.exportSave({
+      data: r.bytes,
+      name: exportImgTitle + (all ? '.png' : `-p${r.startPage}-${r.endPage}.png`),
+      ext: 'png',
+      extName: 'PNG 图片'
+    })
+    if (!save.canceled) notify(all ? '已导出长图' : `已导出第 ${r.startPage}–${r.endPage} 页长图`)
+    closeExportImageDialog()
+  } catch (err) {
+    notify('导出失败：文档过长或渲染超限')
+  } finally {
+    exportImgBusy.value = false
+  }
+}
+
+// ---------- PDF / 打印：挂载独立打印版式后交给系统管线 ----------
+function runPrintDialog() {
+  return new Promise((resolve) => {
+    const done = () => {
+      window.removeEventListener('afterprint', done)
+      resolve()
+    }
+    window.addEventListener('afterprint', done)
+    setTimeout(done, 60_000)
+    window.print()
+  })
+}
+
+async function withPrintRoot(fn) {
+  const { body } = docHtmlBody()
+  if (!body) return notify('文档为空')
+  const mounted = mountPrintRoot(body)
+  try {
+    await waitPrintReady(mounted.root)
+    await fn()
+  } finally {
+    mounted.dispose()
+  }
+}
+
+/** 静默导出 PDF；运行时不支持时降级为系统打印（可另存 PDF） */
+async function exportPdf() {
+  await withPrintRoot(async () => {
+    try {
+      const r = await window.mdreader.exportPdf?.()
+      if (r?.unsupported) {
+        notify('当前运行时不支持静默导出，已打开打印（可另存为 PDF）')
+        await runPrintDialog()
+        return
+      }
+      if (!r.canceled) notify('已导出 PDF')
+    } catch (err) {
+      notify('导出失败：' + (err?.message || err))
+    }
+  })
+}
+
+async function printDoc() {
+  await withPrintRoot(() => runPrintDialog())
 }
 
 async function exportBytes(data, name, ext, extName, okMsg) {
@@ -356,27 +453,12 @@ async function exportBytes(data, name, ext, extName, okMsg) {
   }
 }
 
-/** 静默导出 PDF；运行时不支持时降级为系统打印（可另存 PDF） */
-async function exportPdf() {
-  try {
-    const r = await window.mdreader.exportPdf?.()
-    if (r?.unsupported) {
-      notify('当前运行时不支持静默导出，已打开打印（可另存为 PDF）')
-      window.print()
-      return
-    }
-    if (!r.canceled) notify('已导出 PDF')
-  } catch (err) {
-    notify('导出失败：' + (err?.message || err))
-  }
-}
-
 const menuActions = {
   'file:new': newFile,
   'file:open': openFile,
   'file:save': saveFile,
   'file:save-as': saveFileAs,
-  'file:export-image': () => exportImage(),
+  'file:export-image': () => openExportImageDialog(),
   'file:export-word': () => exportWord(),
   'insert:mindmap': () => editorRef.value?.insertMindmap(),
   'edit:find': () => editorRef.value?.openSearch(false),
@@ -392,7 +474,7 @@ const menuActions = {
   'fmt:removeFormat': () => editorRef.value?.execFormat('removeFormat'),
   'file:export-html': () => exportHtml(),
   'file:export-pdf': () => exportPdf(),
-  'file:print': () => window.print(),
+  'file:print': () => printDoc(),
   'view:doc-source': () => editorRef.value?.showDocSource(),
   'view:file-tree': () => (store.showFileTree = !store.showFileTree),
   'help:changelog': () => editorRef.value?.showChangelog(),
@@ -750,6 +832,58 @@ watch(
         <div class="md-source-foot">
           <UxButton size="sm" variant="secondary" @click="openChangelog">查看更新日志</UxButton>
           <UxButton size="sm" variant="primary" @click="aboutOpen = false">关闭</UxButton>
+        </div>
+      </div>
+    </div>
+    <div
+      v-if="exportImgOpen"
+      ref="exportImgLayerEl"
+      class="md-source-layer"
+      style="z-index: 2400"
+      tabindex="-1"
+      role="dialog"
+      aria-modal="true"
+      aria-label="导出长图"
+      @mousedown.self="closeExportImageDialog"
+      @keydown.esc="closeExportImageDialog"
+    >
+      <div class="md-source-box export-img-box">
+        <div class="md-source-head"><span>导出长图</span></div>
+        <div class="confirm-msg">
+          <p class="export-img-note">A4 版式，共 {{ exportImgPages }} 页（与导出 PDF 页码一致）</p>
+          <label class="export-img-row">
+            <input v-model="exportImgMode" type="radio" value="all" />
+            <span>全部页面（1–{{ exportImgPages }}）</span>
+          </label>
+          <label class="export-img-row">
+            <input v-model="exportImgMode" type="radio" value="range" />
+            <span>指定范围</span>
+            <input
+              v-model.number="exportImgStart"
+              class="export-img-num"
+              type="number"
+              min="1"
+              :max="exportImgPages"
+              :disabled="exportImgMode !== 'range'"
+            />
+            <span>至</span>
+            <input
+              v-model.number="exportImgEnd"
+              class="export-img-num"
+              type="number"
+              min="1"
+              :max="exportImgPages"
+              :disabled="exportImgMode !== 'range'"
+            />
+            <span>页</span>
+          </label>
+          <p class="export-img-note">所选范围将合成一张连续长图</p>
+        </div>
+        <div class="md-source-foot">
+          <UxButton size="sm" variant="secondary" @click="closeExportImageDialog">取消</UxButton>
+          <UxButton size="sm" variant="primary" :disabled="exportImgBusy" @click="confirmExportImage">
+            {{ exportImgBusy ? '导出中…' : '导出' }}
+          </UxButton>
         </div>
       </div>
     </div>
