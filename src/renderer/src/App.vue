@@ -13,6 +13,7 @@ import TocPanel from './components/TocPanel.vue'
 import FileTreePanel from './components/FileTreePanel.vue'
 import { IMAGE_RE, stripMdExt } from './utils/file'
 import { idbGet, idbSet } from './utils/idb'
+import { useUpdateCheck } from './composables/useUpdateCheck'
 
 setupTheme()
 
@@ -98,6 +99,17 @@ function confirmClose(message) {
 
 const confirmLayerEl = ref(null)
 const aboutLayerEl = ref(null)
+
+const appVersion = String(__APP_VERSION__)
+const {
+  latest: updateLatest,
+  checking: updateChecking,
+  upToDate: updateUpToDate,
+  lastError: updateLastError,
+  check: checkUpdate,
+  dismiss: dismissUpdate,
+  openReleases: openReleasePage
+} = useUpdateCheck()
 
 watch(aboutOpen, (v) => {
   if (v) nextTick(() => aboutLayerEl.value?.focus())
@@ -540,6 +552,8 @@ onMounted(() => {
   if (!localStorage.getItem('mdreader:tour-done')) {
     setTimeout(() => (tourOpen.value = true), 500)
   }
+  // 启动静默检查更新（网络失败无痕），4 秒延迟避开首屏
+  const updateTimer = setTimeout(() => checkUpdate({ silent: true }), 4000)
   const dragPrevent = (e) => {
     e.preventDefault()
     e.stopPropagation()
@@ -566,6 +580,7 @@ onMounted(() => {
     () => window.removeEventListener('dragover', dragPrevent, true),
     () => window.removeEventListener('drop', onDrop, true),
     () => window.removeEventListener('beforeunload', persistSession),
+    () => clearTimeout(updateTimer),
     () => clearInterval(sessionTimer),
     () => clearInterval(autosaveTimer),
     window.mdreader.onMenuAction((name, payload) => {
@@ -688,6 +703,19 @@ watch(
       </div>
     </div>
     <div
+      v-if="updateLatest && !settingsOpen && !aboutOpen"
+      class="update-banner"
+      style="z-index: 2300"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="update-banner-text">
+        发现新版本 <b>{{ updateLatest.tag }}</b>（当前 {{ appVersion }}）
+      </span>
+      <button class="update-banner-go" title="打开 GitHub 下载页" @click="openReleasePage">去下载</button>
+      <button class="update-banner-x" title="本次会话不再提示" @click="dismissUpdate">✕</button>
+    </div>
+    <div
       v-if="aboutOpen"
       ref="aboutLayerEl"
       class="md-source-layer"
@@ -706,6 +734,18 @@ watch(
           <p class="about-line">所见即所得的 Markdown 桌面编辑器。</p>
           <p class="about-line">支持实时渲染、Mermaid 图表、脑图画布、主题切换与全类型源码视图。</p>
           <p class="about-line">基于 Vue 3 + Vditor，提供 Electron 与 Tauri 2 两种运行方案。</p>
+          <p class="about-line about-version">当前版本 {{ appVersion }}</p>
+          <div class="about-update">
+            <button class="update-banner-go" :disabled="updateChecking" @click="checkUpdate()">
+              {{ updateChecking ? '检查中…' : '检查更新' }}
+            </button>
+            <button v-if="updateLatest" class="update-banner-go" @click="openReleasePage">
+              去下载 {{ updateLatest.tag }}
+            </button>
+            <span v-if="updateLatest" class="about-note">发现新版本 {{ updateLatest.tag }}</span>
+            <span v-else-if="updateUpToDate" class="about-note">已是最新版本</span>
+            <span v-else-if="updateLastError" class="about-note about-note-err">检查失败，请确认网络可访问 GitHub</span>
+          </div>
         </div>
         <div class="md-source-foot">
           <UxButton size="sm" variant="secondary" @click="openChangelog">查看更新日志</UxButton>

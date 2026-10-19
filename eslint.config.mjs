@@ -20,9 +20,9 @@ export default [
   js.configs.recommended,
   ...pluginVue.configs['flat/essential'],
   {
-    // 渲染层：浏览器环境
+    // 渲染层：浏览器环境（__APP_VERSION__ 为 Vite define 注入的构建常量）
     files: ['src/renderer/**/*.{js,vue}'],
-    languageOptions: { globals: globals.browser }
+    languageOptions: { globals: { ...globals.browser, __APP_VERSION__: 'readonly' } }
   },
   {
     // Electron 主进程 / preload：Node + Electron 环境

@@ -254,6 +254,87 @@
   color: var(--fg-soft);
 }
 
+.about-version {
+  margin-top: var(--tk-sp-10);
+  font-weight: 600;
+  color: var(--tk-fg);
+}
+
+.about-update {
+  display: flex;
+  align-items: center;
+  gap: var(--tk-sp-8);
+  margin-bottom: var(--tk-sp-6);
+}
+
+.about-note {
+  font-size: var(--tk-fs-12);
+  color: var(--tk-fg-soft);
+}
+
+.about-note-err {
+  color: var(--tk-danger);
+}
+
+.update-banner {
+  position: fixed;
+  top: var(--tk-sp-16);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--tk-sp-10);
+  max-width: 60vw;
+  padding: var(--tk-sp-8) var(--tk-sp-12);
+  color: var(--tk-fg);
+  background: var(--tk-bg-panel);
+  border: 1px solid var(--tk-border);
+  border-radius: var(--tk-rd-8);
+  box-shadow: var(--tk-sh-4);
+}
+
+.update-banner-text {
+  font-size: var(--tk-fs-12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.update-banner-go {
+  flex: none;
+  font-size: var(--tk-fs-12);
+  color: var(--tk-accent-fg);
+  background: var(--tk-accent);
+  border: none;
+  border-radius: var(--tk-rd-6);
+  padding: var(--tk-sp-4) var(--tk-sp-10);
+  cursor: pointer;
+  opacity: 0.92;
+}
+
+.update-banner-go:hover {
+  opacity: 1;
+}
+
+.update-banner-go:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.update-banner-x {
+  flex: none;
+  font-size: var(--tk-fs-12);
+  color: var(--tk-fg-soft);
+  background: transparent;
+  border: none;
+  padding: var(--tk-sp-2) var(--tk-sp-4);
+  cursor: pointer;
+}
+
+.update-banner-x:hover {
+  color: var(--tk-fg);
+}
+
 .md-code-badge {
   position: fixed;
   z-index: var(--tk-z-top);

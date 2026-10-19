@@ -1,12 +1,18 @@
 import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { uxAliases } from './scripts/ux-aliases.mjs'
+
+const { version } = JSON.parse(readFileSync('package.json', 'utf-8'))
 
 // Tauri 专用前端配置（与 electron-vite 配置互不影响）
 export default defineConfig({
   root: 'src/renderer',
   plugins: [vue()],
+  define: {
+    __APP_VERSION__: JSON.stringify(version)
+  },
   resolve: {
     alias: [
       // UxKit：本地直连 ../UX-FRW，无上游时回退 vendor/uxkit（CI / Pages）
