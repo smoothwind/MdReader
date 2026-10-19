@@ -17,7 +17,10 @@ import { useSelectionBar } from '../composables/useSelectionBar'
 import { useToc } from '../composables/useToc'
 import { useLinkEdit } from '../composables/useLinkEdit'
 import { useBlockSourceEdit } from '../composables/useBlockSourceEdit'
-import { resolveLangIcon } from './icons/langIcon'
+import { useMarkmapZoom } from '../composables/useMarkmapZoom'
+import { useTableStyles } from '../composables/useTableStyles'
+import { useCodeBadge } from '../composables/useCodeBadge'
+import { useBlockExports } from '../composables/useBlockExports'
 import { computeStats, tableToMarkdown, replaceCodeBlockInMd } from '../utils/markdown-utils'
 import { formatCode } from '../utils/code-format'
 import { stripMdExt } from '../utils/file'
@@ -30,7 +33,6 @@ import {
   langOfBlock,
   findHit
 } from '../utils/dom-blocks'
-import { dataUrlToBytes, svgToPngBytes, exportBytes } from '../utils/exporters'
 import { publicPath } from '../utils/assets'
 const MindMapEditor = defineAsyncComponent(() => import('./MindMapEditor.vue'))
 
@@ -63,8 +65,6 @@ let linkHoverTimer = null
 let tocTimer = null
 let scrollTimer = null
 let scrollRaf = 0
-// 表格样式映射缓存：避免每次 DOM 变更都同步读 localStorage + JSON.parse
-let styleMapCache = { key: null, map: null }
 const lastMouse = { x: 0, y: 0, seen: false }
 let pendingScroll = 0
 
@@ -88,19 +88,8 @@ function getScrollTop() {
 
 const codeStyle = (t) => (t === 'dark' ? 'vs2015' : 'github')
 
-// 未单独设置过的表格使用的默认样式（紧凑）
-const DEFAULT_TABLE_STYLE = 'md-tbl-compact'
-
-const TABLE_STYLES = [
-  { name: 'md-tbl-default', label: '宽松' },
-  { name: 'md-tbl-zebra', label: '斑马纹' },
-  { name: 'md-tbl-compact', label: '紧凑' },
-  { name: 'md-tbl-plain', label: '极简' }
-]
-
 const bar = reactive({ visible: false, x: 0, y: 0, type: null, language: null, index: -1, blockIndex: -1, url: '', anchorOk: null, md: '', text: '', el: null })
 const styleMenu = reactive({ visible: false, x: 0, y: 0 })
-const activeStyle = ref(DEFAULT_TABLE_STYLE)
 
 function rootEl() {
   return ready ? host.value : null
@@ -111,6 +100,40 @@ function rootEl() {
 const tocApi = useToc({ getRootEl: rootEl })
 const linkEditApi = useLinkEdit({ notify, syncDoc: syncDocAfterDomEdit })
 const blockSrcApi = useBlockSourceEdit({ notify, syncDoc: syncDocAfterDomEdit })
+const {
+  DEFAULT_TABLE_STYLE,
+  TABLE_STYLES,
+  applyRememberedStyles,
+  applyStyle
+} = useTableStyles({ getRootEl: rootEl, getActiveDoc: getActive })
+
+const activeStyle = ref(DEFAULT_TABLE_STYLE)
+
+const { codeBadge, updateCodeBadge } = useCodeBadge({ getBar: () => bar })
+const {
+  mmCtl,
+  mmUpdate,
+  mmZoom,
+  mmReset,
+  dispose: disposeMarkmapZoom
+} = useMarkmapZoom({ getBar: () => bar })
+const {
+  exportCodeImage,
+  exportTableImage,
+  exportTableExcel,
+  exportMermaidPng,
+  exportMarkmapPng,
+  exportDocImage
+} = useBlockExports({
+  resolveTable,
+  resolveMermaidPanel,
+  resolveCodeBlock,
+  getBar: () => bar,
+  getRootEl: rootEl,
+  baseName,
+  themeBg,
+  notify
+})
 
 function refreshStats(text) {
   store.stats = computeStats(text)
@@ -523,49 +546,6 @@ function resolveCodeBlock() {
   return siblings[bar.index] || null
 }
 
-async function exportCodeImage() {
-  const block = resolveCodeBlock()
-  if (!block) return notify('未找到代码块')
-  const text = codeBlockText(block).replace(/\s+$/, '')
-  if (!text.trim()) return notify('代码块为空')
-  try {
-    const { toPng } = await import('html-to-image')
-    const holder = document.createElement('div')
-    holder.style.cssText = 'position:fixed;left:-99999px;top:0;'
-    const pre = document.createElement('pre')
-    pre.textContent = text
-    // 导出图内文样式取主题令牌运行时值（原暗色边框 #3a4356 统一为 --border #363e52）
-    const cs = getComputedStyle(document.documentElement)
-    const vFg = cs.getPropertyValue('--fg').trim()
-    const vBg = cs.getPropertyValue('--bg-soft').trim()
-    const vBorder = cs.getPropertyValue('--border').trim()
-    pre.style.cssText = [
-      'margin:0',
-      'padding:16px 20px',
-      'font-family:Consolas,"Cascadia Mono","Courier New",monospace',
-      'font-size:13px',
-      'line-height:1.5',
-      'white-space:pre',
-      'tab-size:4',
-      'color:' + vFg,
-      'background:' + vBg,
-      'border:1px solid ' + vBorder,
-      'border-radius:8px'
-    ].join(';')
-    holder.appendChild(pre)
-    document.body.appendChild(holder)
-    const data = await dataUrlToBytes(await toPng(pre, { pixelRatio: 2 }))
-    holder.remove()
-    const tag = bar.language ? '-' + bar.language : ''
-    await exportBytes(data, `${baseName()}-code${tag}-${bar.index + 1}.png`, 'png', 'PNG 图片', {
-      notify,
-      okMsg: '已导出图片'
-    })
-  } catch {
-    notify('导出失败')
-  }
-}
-
 async function copySource() {
   let text
   if (bar.type === 'mermaid') text = recoverDiagramSource(resolveMermaidPanel(), 'mermaid')
@@ -575,94 +555,6 @@ async function copySource() {
   else text = tableToMarkdown(resolveTable())
   if (!text) return notify('未找到可复制的内容')
   notify((await copyText(text)) ? '源码已复制' : '复制失败')
-}
-
-async function exportTableImage() {
-  const table = resolveTable()
-  if (!table) return
-  try {
-    const { toPng } = await import('html-to-image')
-    const data = await dataUrlToBytes(await toPng(table, { pixelRatio: 2, backgroundColor: themeBg() }))
-    await exportBytes(data, `${baseName()}-table-${bar.index + 1}.png`, 'png', 'PNG 图片', {
-      notify,
-      okMsg: '已导出图片'
-    })
-  } catch {
-    notify('导出失败')
-  }
-}
-
-async function exportTableExcel() {
-  const table = resolveTable()
-  if (!table) return
-  try {
-    const XLSX = await import('xlsx')
-    const wb = XLSX.utils.table_to_book(table, { raw: false })
-    const data = new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }))
-    await exportBytes(data, `${baseName()}-table-${bar.index + 1}.xlsx`, 'xlsx', 'Excel 工作簿', {
-      notify,
-      okMsg: '已导出 Excel'
-    })
-  } catch {
-    notify('导出失败')
-  }
-}
-
-async function exportDiagramPng(lang) {
-  const panel = resolveMermaidPanel()
-  const svg = panel && panel.querySelector('svg')
-  if (!svg) return
-  try {
-    const data = await svgToPngBytes(svg, themeBg())
-    await exportBytes(data, `${baseName()}-${lang}-${bar.index + 1}.png`, 'png', 'PNG 图片', {
-      notify,
-      okMsg: '已导出 PNG'
-    })
-  } catch {
-    notify('导出失败')
-  }
-}
-
-function exportMermaidPng() {
-  return exportDiagramPng('mermaid')
-}
-
-/** 整篇长图：渲染内容整体导出 PNG（按内容高度自适应缩放，规避浏览器 Canvas 高度上限） */
-async function exportDocImage(baseTitle) {
-  const target = rootEl()?.querySelector('.vditor-wysiwyg')
-  if (!target) {
-    notify('编辑器未就绪')
-    return false
-  }
-  try {
-    const { toPng } = await import('html-to-image')
-    const height = target.scrollHeight || 1
-    // Chrome Canvas 高度上限约 32767px；超过时降低 pixelRatio 保证导出成功
-    const MAX_CANVAS_PX = 16000
-    const pixelRatio = Math.max(1, Math.min(2, MAX_CANVAS_PX / height))
-    const dataUrl = await toPng(target, {
-      pixelRatio,
-      backgroundColor: themeBg(),
-      width: target.scrollWidth || undefined,
-      height
-    })
-    const blob = await (await fetch(dataUrl)).blob()
-    const data = new Uint8Array(await blob.arrayBuffer())
-    const r = await window.mdreader.exportSave({
-      data,
-      name: (baseTitle || baseName()) + '.png',
-      ext: 'png',
-      extName: 'PNG 图片'
-    })
-    return !r.canceled
-  } catch {
-    notify('导出失败：文档过长或渲染超限')
-    return false
-  }
-}
-
-function exportMarkmapPng() {
-  return exportDiagramPng('markmap')
 }
 
 async function editMarkmap() {
@@ -691,35 +583,11 @@ async function editMarkmap() {
   notify('脑图已更新')
 }
 
-function styleStoreKey() {
-  return 'mdreader:tblstyle:' + (getActive()?.filePath || 'untitled')
-}
-
-function readStyleMap() {
-  const key = styleStoreKey()
-  if (styleMapCache.key === key && styleMapCache.map) return styleMapCache.map
-  let map
-  try {
-    map = JSON.parse(localStorage.getItem(key) || '{}') || {}
-  } catch {
-    map = {}
-  }
-  styleMapCache = { key, map }
-  return map
-}
-
-function applyRememberedStyles() {
-  const root = rootEl()
-  if (!root) return
-  const map = readStyleMap()
-  // 无历史样式且当前表格未带样式类：直接跳过（避免每次输入都全量比对）
-  if (!Object.keys(map).length && !root.querySelector('table[class*="md-tbl-"]')) return
-  root.querySelectorAll('table').forEach((t, i) => {
-    const name = map[i] || DEFAULT_TABLE_STYLE
-    TABLE_STYLES.forEach(({ name: n }) => {
-      if (n !== 'md-tbl-default') t.classList.toggle(n, n === name)
-    })
-  })
+function pickStyle(name) {
+  const table = resolveTable()
+  if (!table) return
+  applyStyle(table, bar.index, name)
+  styleMenu.visible = false
 }
 
 async function openLocalLink(href) {
@@ -777,23 +645,6 @@ function toggleStyleMenu() {
   styleMenu.visible = true
 }
 
-function pickStyle(name) {
-  const table = resolveTable()
-  if (!table) return
-  TABLE_STYLES.forEach(({ name: n }) => {
-    if (n !== 'md-tbl-default') table.classList.remove(n)
-  })
-  if (name !== 'md-tbl-default') table.classList.add(name)
-  const map = readStyleMap()
-  map[bar.index] = name
-  try {
-    localStorage.setItem(styleStoreKey(), JSON.stringify(map))
-  } catch {
-    /* ignore */
-  }
-  styleMenu.visible = false
-}
-
 function onMouseMove(e) {
   lastMouse.x = e.clientX
   lastMouse.y = e.clientY
@@ -842,128 +693,7 @@ function onDocScroll() {
   }, SCROLL_SETTLE_MS)
 }
 
-// 代码块语言徽标（悬浮时显示于块右上角）
-const codeBadge = reactive({ visible: false, top: 0, right: 0, lang: '', icon: null })
-
-// ---------- 脑图缩放控制 ----------
-
-const mmCtl = reactive({ pct: 100 })
-let mmPanelEl = null
-let mmObserver = null
-const mmInitial = new WeakMap()
-
-function mmSvgOf(panel) {
-  return panel?.querySelector('svg') || null
-}
-
-function mmGOf(svg) {
-  return svg.querySelector('g')
-}
-
-function mmParseTf(str) {
-  const m = /translate\(([-\d.]+)[, ]+([-\d.]+)\)\s*scale\(([\d.]+)\)/.exec(str || '')
-  return m ? { x: +m[1], y: +m[2], s: +m[3] } : { x: 0, y: 0, s: 1 }
-}
-
-function mmSetTf(svg, o) {
-  const g = mmGOf(svg)
-  if (g) g.setAttribute('transform', `translate(${o.x},${o.y}) scale(${o.s})`)
-}
-
-function mmInit(svg) {
-  if (!svg || mmInitial.has(svg)) return
-  const g = mmGOf(svg)
-  mmInitial.set(svg, g ? g.getAttribute('transform') || '' : '')
-}
-
-function mmUpdate() {
-  const panel = bar.visible && bar.type === 'markmap' && bar.el?.isConnected ? bar.el : null
-  const svg = mmSvgOf(panel)
-  if (!svg) {
-    mmPanelEl = null
-    return
-  }
-  mmInit(svg)
-  mmPanelEl = panel
-  const cur = mmParseTf(mmGOf(svg)?.getAttribute('transform'))
-  const init = mmParseTf(mmInitial.get(svg))
-  const pct = Math.round((cur.s / (init.s || 1)) * 100)
-  if (pct !== mmCtl.pct) mmCtl.pct = pct
-}
-
-function mmZoom(dir) {
-  const svg = mmSvgOf(mmPanelEl)
-  if (!svg) return
-  const g = mmGOf(svg)
-  const cur = mmParseTf(g?.getAttribute('transform'))
-  const init = mmParseTf(mmInitial.get(svg))
-  const k = dir > 0 ? 1.25 : 0.8
-  const s2 = Math.min(10, Math.max(0.1, cur.s * k))
-  const cx = (svg.clientWidth || panelWidth(mmPanelEl)) / 2
-  const cy = (svg.clientHeight || panelHeight(mmPanelEl)) / 2
-  mmSetTf(svg, {
-    x: cx - ((cx - cur.x) * s2) / cur.s,
-    y: cy - ((cy - cur.y) * s2) / cur.s,
-    s: s2
-  })
-  mmCtl.pct = Math.round((s2 / (init.s || 1)) * 100)
-}
-
-function panelWidth(el) {
-  return el?.clientWidth || 600
-}
-
-function panelHeight(el) {
-  return el?.clientHeight || 400
-}
-
-function mmReset() {
-  const svg = mmSvgOf(mmPanelEl)
-  if (!svg) return
-  const init = mmParseTf(mmInitial.get(svg))
-  mmSetTf(svg, init)
-  mmCtl.pct = 100
-}
-
-// markmap 缩放由内部 panzoom 直接改写 <g transform>：属性观察替代 500ms 轮询
-watch(
-  () => bar.visible && bar.type === 'markmap' && !!bar.el,
-  (v) => {
-    mmObserver?.disconnect()
-    mmObserver = null
-    if (!v) {
-      mmPanelEl = null
-      return
-    }
-    mmObserver = new MutationObserver(() => mmUpdate())
-    mmObserver.observe(bar.el, { subtree: true, attributes: true, attributeFilter: ['transform'] })
-    mmUpdate()
-  }
-)
-
-function updateCodeBadge() {
-  if (!(bar.visible && bar.type === 'code' && bar.el?.isConnected)) {
-    codeBadge.visible = false
-    return
-  }
-  const r = bar.el.getBoundingClientRect()
-  if (r.bottom < 0 || r.top > window.innerHeight) {
-    codeBadge.visible = false
-    return
-  }
-  codeBadge.visible = true
-  codeBadge.lang = bar.language || '代码块'
-  codeBadge.icon = resolveLangIcon(bar.language)
-  codeBadge.top = r.top + 6
-  codeBadge.right = Math.max(8, window.innerWidth - r.right + 8)
-}
-
-watch(
-  () => bar.visible,
-  (v) => {
-    if (!v) codeBadge.visible = false
-  }
-)
+// ---------- 脑图缩放（useMarkmapZoom） ----------
 
 function onGlobalKeydown(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && !e.shiftKey) {
@@ -1268,7 +998,7 @@ function insertMindmap() {
 
 onBeforeUnmount(() => {
   if (styleObserver) styleObserver.disconnect()
-  mmObserver?.disconnect()
+  disposeMarkmapZoom()
   host.value?.removeEventListener?.('paste', onEditorPaste, true)
   window.removeEventListener('scroll', onDocScroll, true)
   window.removeEventListener('keydown', onGlobalKeydown, true)
