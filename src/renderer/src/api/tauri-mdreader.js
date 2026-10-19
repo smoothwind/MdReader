@@ -63,6 +63,7 @@ if (isTauri && !window.mdreader) {
     exportPdf: () => invoke('export_pdf'),
     saveImageAsset: (docPath, data, ext) =>
       invoke('save_image_asset', { docPath, data: bytesToBase64(data), ext }),
+    importAsset: (src, docPath) => invoke('import_asset', { src, docPath }),
     openFolderDialog: () => invoke('open_folder_dialog'),
     listDir: (path) => invoke('list_dir', { path }),
     checkAssets: (docPath, referenced) => invoke('check_assets', { docPath, referenced: referenced || [] }),

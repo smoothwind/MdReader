@@ -15,6 +15,8 @@
  *   - tokens.css 本身是令牌定义源，自动跳过
  *
  * 用法：node scripts/check-tokens.mjs ["src/renderer/src/**\/*.css", ...]
+ *
+ * 依赖 Node ≥ 22（node:fs 的 globSync）；CI 统一使用 node-version 22。
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

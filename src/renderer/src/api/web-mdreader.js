@@ -60,7 +60,7 @@ if (typeof window !== 'undefined' && !window.mdreader) {
             return
           }
           const content = await file.text()
-          resolve({ path: 'web:' + file.name, name: file.name, content })
+          resolve({ canceled: false, path: 'web:' + file.name, name: file.name, content })
         })
         window.addEventListener('focus', () => setTimeout(() => input.remove(), 500), { once: true })
         document.body.appendChild(input)
@@ -100,7 +100,7 @@ if (typeof window !== 'undefined' && !window.mdreader) {
       const name = String(path || '').replace(/^web:/, '')
       docs[name] = content
       saveDocs(docs)
-      return Promise.resolve({ savedAt: Date.now() })
+      return Promise.resolve({ path, savedAt: Date.now() })
     },
 
     saveAs: (content, name) => {

@@ -5,16 +5,21 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   bundle:
     runs-on: windows-latest
+    timeout-minutes: 90
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -22,6 +27,11 @@ jobs:
           workspaces: src-tauri
       - run: npm ci --ignore-scripts
       - run: node scripts/copy-vditor.mjs
+      # 版本号单一来源：以 package.json 为准同步 tauri.conf.json 与 Cargo.toml，
+      # 避免只改 package.json 打 tag 导致产物版本漂移（npm ci 跳过了 postinstall）
+      - run: npm run sync-version
+      - run: npm run lint
+      - run: npm run test
       - run: npm run tauri:build
       - name: Upload installer
         uses: actions/upload-artifact@v4

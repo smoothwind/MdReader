@@ -17,19 +17,20 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
       - run: node scripts/copy-vditor.mjs
+      - name: Resolve project-site base path
+        # 项目站 URL 为 https://<owner>.github.io/<repo>/，应用位于其 /app/ 子路径
+        run: echo "WEB_BASE=/${GITHUB_REPOSITORY#*/}/app/" >> "$GITHUB_ENV"
       - name: Build web app
         run: npm run build:web
-        env:
-          # 项目站 URL 为 https://<owner>.github.io/<repo>/，应用位于其 /app/ 子路径
-          WEB_BASE: /${{ split(github.repository, '/')[1] }}/app/
       - name: Assemble site
         run: |
           mkdir -p site/app
@@ -43,6 +44,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

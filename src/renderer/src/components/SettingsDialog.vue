@@ -29,6 +29,7 @@ const runtime = window.mdreader?.runtime || 'electron'
 const isElectron = runtime === 'electron'
 const cfg = ref(null)
 const saving = ref(false)
+const saveErr = ref('')
 const metrics = ref(null)
 const history = ref([])
 const autoRefresh = ref(true)
@@ -181,10 +182,13 @@ const curCpu = computed(() => {
 async function save(needRestart) {
   if (!cfg.value) return
   saving.value = true
+  saveErr.value = ''
   try {
     await window.mdreader.setPerfConfig({ ...cfg.value })
     if (needRestart) window.mdreader.relaunchApp()
     else emit('close')
+  } catch (err) {
+    saveErr.value = '保存失败：' + (err?.message || err)
   } finally {
     saving.value = false
   }
@@ -361,6 +365,7 @@ onBeforeUnmount(() => {
 
       <div class="pf-foot">
         <span class="pf-note">{{ footNote }}</span>
+        <span v-if="saveErr" class="pf-save-err">{{ saveErr }}</span>
         <span class="pf-spacer"></span>
         <template v-if="activeSection === 'docs' && isElectron">
           <button class="pf-btn" :disabled="saving" @click="emit('close')">取消</button>
@@ -585,6 +590,10 @@ onBeforeUnmount(() => {
 }
 .pf-spacer {
   flex: 1;
+}
+.pf-save-err {
+  font-size: var(--tk-fs-12);
+  color: var(--tk-danger);
 }
 .pf-btn {
   display: inline-flex;

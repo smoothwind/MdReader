@@ -436,8 +436,13 @@ async function autosaveTick() {
         const r = await window.mdreader.save(t.filePath, t.content)
         t.dirty = false
         t.savedAt = r.savedAt
+        t.autosaveFailed = false
       } catch {
-        /* 下一次手动保存时给出提示 */
+        /* 失败提示一次，避免每 30 秒刷屏；成功后复位 */
+        if (!t.autosaveFailed) {
+          t.autosaveFailed = true
+          notify(`自动保存 “${t.fileName || UNNAMED}” 失败，将在下个周期重试`)
+        }
       }
     }
   }
@@ -450,7 +455,12 @@ async function importDroppedImage(src) {
     editorRef.value?.notify('请先保存文档，再插入图片')
     return
   }
-  const r = await window.mdreader.importAsset(src, tab.filePath)
+  let r
+  try {
+    r = await window.mdreader.importAsset?.(src, tab.filePath)
+  } catch (err) {
+    r = { ok: false, message: err?.message || String(err) }
+  }
   if (r?.ok) editorRef.value?.insertImage(r.relative)
   else editorRef.value?.notify(r?.message || '图片导入失败')
 }

@@ -44,6 +44,17 @@ function pathFromArgv(argv) {
   return raw ? resolve(raw) : null
 }
 
+/** Promise 超时保护：避免主进程向渲染层发出的请求永久 pending（如 printToPDF 卡死） */
+function withTimeout(promise, ms, message) {
+  let timer
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms)
+    })
+  ])
+}
+
 async function openLocalHref(href, docPath) {
   let p
   if (/^file:/i.test(href)) {
@@ -504,11 +515,15 @@ function registerIpc() {
       filters: [{ name: 'PDF 文档', extensions: ['pdf'] }]
     })
     if (r.canceled || !r.filePath) return { canceled: true }
-    const buf = await win.webContents.printToPDF({
-      printBackground: true,
-      pageSize: 'A4',
-      margins: { top: 0.6, bottom: 0.6, left: 0.6, right: 0.6 }
-    })
+    const buf = await withTimeout(
+      win.webContents.printToPDF({
+        printBackground: true,
+        pageSize: 'A4',
+        margins: { top: 0.6, bottom: 0.6, left: 0.6, right: 0.6 }
+      }),
+      30_000,
+      '导出超时：渲染进程未响应，请重试'
+    )
     await atomicWriteFile(r.filePath, buf)
     return { canceled: false, path: r.filePath }
   })
