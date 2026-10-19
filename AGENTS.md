@@ -75,6 +75,9 @@
   无法从外部拦截其内部调用
 - `xlsx`（SheetJS 0.18.5，npm 上最后版本）只用于**导出** `.xlsx`（不解析外部文件），且已改为
   动态 `import('xlsx')` 不进主包；如需升级须走 SheetJS 官方 CDN 源，并重新评估 CVE（读取场景才有风险）
+- vditor 静态资源按白名单复制（`scripts/copy-vditor.mjs`，21.9MB→11MB）：mathjax/graphviz/echarts/
+  abcjs/wavedrom/smiles-drawer/plantuml/flowchart 已裁剪，文档书写对应代码块**不会渲染**；
+  数学渲染走默认 KaTeX 引擎。需要某个能力时把对应目录加回 KEEP 列表即可
 - 并发/日志：Tauri 侧互斥锁一律用 `lock_ok()`（中毒容错，release `panic="abort"` 下 `unwrap` 会直接杀进程）；
   阻塞式对话框只能出现在 `async` command 中（同步 command 阻塞主线程）；渲染层日志超 2MB 轮转为
   `mdreader.log.1`
