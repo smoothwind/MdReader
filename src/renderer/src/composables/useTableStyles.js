@@ -7,10 +7,10 @@
 const DEFAULT_TABLE_STYLE = 'md-tbl-compact'
 
 const TABLE_STYLES = [
-  { name: 'md-tbl-default', label: '宽松' },
-  { name: 'md-tbl-zebra', label: '斑马纹' },
-  { name: 'md-tbl-compact', label: '紧凑' },
-  { name: 'md-tbl-plain', label: '极简' }
+  { name: 'md-tbl-default', labelKey: 'style.loose' },
+  { name: 'md-tbl-zebra', labelKey: 'style.zebra' },
+  { name: 'md-tbl-compact', labelKey: 'style.compact' },
+  { name: 'md-tbl-plain', labelKey: 'style.plain' }
 ]
 
 export function useTableStyles({ getRootEl, getActiveDoc }) {

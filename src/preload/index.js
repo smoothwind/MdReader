@@ -8,6 +8,7 @@ const subscribe = (channel) => (callback) => {
 
 contextBridge.exposeInMainWorld('mdreader', {
   runtime: 'electron',
+  setLocale: (locale) => ipcRenderer.invoke('app:set-locale', locale),
   openDialog: () => ipcRenderer.invoke('file:open-dialog'),
   readPath: (path, opts) => ipcRenderer.invoke('file:read', { path, skipRecent: !!opts?.skipRecent }),
   openExternal: (url) => ipcRenderer.invoke('link:open-external', url),

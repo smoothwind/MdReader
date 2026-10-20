@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import MindElixir from 'mind-elixir'
 import {
   ZoomIn, ZoomOut, Maximize, LocateFixed, CircleHelp, X,
@@ -8,6 +8,7 @@ import {
 import { UxButton } from '@ux/components'
 import { mdListToTree, treeToMdList } from '../utils/mindmap-convert'
 import Dropdown from './Dropdown.vue'
+import { locale, t } from '../i18n'
 
 const overlay = ref(null)
 const mapEl = ref(null)
@@ -20,30 +21,30 @@ let mind = null
 let resolver = null
 let feedbackTimer = null
 
-const LAYOUTS = [
-  { value: 'side', label: '两侧分布' },
-  { value: 'right', label: '向右展开' },
-  { value: 'left', label: '向左展开' }
-]
+const LAYOUTS = computed(() => [
+  { value: 'side', label: t('mindmap.layoutSide') },
+  { value: 'right', label: t('mindmap.layoutRight') },
+  { value: 'left', label: t('mindmap.layoutLeft') }
+])
 
-const THEMES = [
-  { value: 'classic', label: '经典蓝' },
-  { value: 'forest', label: '森林绿' },
-  { value: 'sunset', label: '暖阳橙' },
-  { value: 'dark', label: '暗夜' }
-]
+const THEMES = computed(() => [
+  { value: 'classic', label: t('mindmap.themeClassic') },
+  { value: 'forest', label: t('mindmap.themeForest') },
+  { value: 'sunset', label: t('mindmap.themeSunset') },
+  { value: 'dark', label: t('mindmap.themeDark') }
+])
 
-const SHORTCUTS = [
-  ['Tab', '新增子节点'],
-  ['Enter', '新增兄弟节点'],
-  ['双击', '编辑节点文字'],
-  ['Delete / Backspace', '删除节点'],
-  ['Ctrl + Z / Ctrl + Y', '撤销 / 重做'],
-  ['Alt + ↑ / Alt + ↓', '上移 / 下移节点'],
-  ['鼠标拖拽', '移动节点 / 平移画布'],
-  ['滚轮', '缩放画布'],
-  ['右键', '上下文菜单']
-]
+const SHORTCUTS = computed(() => [
+  ['Tab', t('mindmap.scNewChild')],
+  ['Enter', t('mindmap.scNewSibling')],
+  [t('mindmap.scDoubleClick'), t('mindmap.scEdit')],
+  ['Delete / Backspace', t('mindmap.scDelete')],
+  ['Ctrl + Z / Ctrl + Y', t('mindmap.scUndo')],
+  ['Alt + ↑ / Alt + ↓', t('mindmap.scMove')],
+  [t('mindmap.scDragMouse'), t('mindmap.scDrag')],
+  [t('mindmap.scWheelMouse'), t('mindmap.scWheel')],
+  [t('mindmap.scRightClick'), t('mindmap.scContext')]
+])
 
 // 脑图画布主题预设：mind-elixir 配置数据（内容主题，非应用 chrome 样式），
 // 其配色独立于设计令牌体系，tokens 检查豁免（scripts/check-tokens.mjs 识别此标记）
@@ -139,7 +140,7 @@ async function open(mdList) {
   mind = new MindElixir({
     el: mapEl.value,
     direction: MindElixir.SIDE,
-    locale: 'zh_CN',
+    locale: locale.value === 'zh-CN' ? 'zh_CN' : 'en',
     draggable: true,
     editable: true,
     contextMenu: true,
@@ -259,9 +260,9 @@ async function copyOutline() {
   try {
     const list = treeToMdList(mind.getData().nodeData)
     await navigator.clipboard.writeText(list)
-    flash('大纲已复制')
+    flash(t('mindmap.copied'))
   } catch {
-    flash('复制失败')
+    flash(t('mindmap.copyFailed'))
   }
 }
 
@@ -271,13 +272,13 @@ async function exportJson() {
     const data = mind.getDataString()
     const r = await window.mdreader.exportSave({
       data: new TextEncoder().encode(data),
-      name: '脑图.json',
+      name: `${t('mindmap.fileName')}.json`,
       ext: 'json',
-      extName: 'JSON 文件'
+      extName: t('mindmap.jsonFile')
     })
-    if (!r.canceled) flash('已导出 JSON')
+    if (!r.canceled) flash(t('mindmap.jsonExported'))
   } catch {
-    flash('导出失败')
+    flash(t('mindmap.exportFailed'))
   }
 }
 
@@ -289,13 +290,13 @@ async function exportImage(kind) {
     const data = new Uint8Array(await blob.arrayBuffer())
     const r = await window.mdreader.exportSave({
       data,
-      name: `脑图.${kind}`,
+      name: `${t('mindmap.fileName')}.${kind}`,
       ext: kind,
-      extName: kind === 'png' ? 'PNG 图片' : 'SVG 矢量图'
+      extName: kind === 'png' ? t('mindmap.pngFile') : t('mindmap.svgFile')
     })
-    if (!r.canceled) flash('已导出 ' + kind.toUpperCase())
+    if (!r.canceled) flash(t('mindmap.exported', { kind: kind.toUpperCase() }))
   } catch {
-    flash('导出失败')
+    flash(t('mindmap.exportFailed'))
   }
 }
 
@@ -312,51 +313,51 @@ defineExpose({ open })
     <div v-if="visible" ref="overlay" class="mm-overlay">
       <div class="mm-window">
         <div class="mm-toolbar">
-          <span class="mm-title">脑图编辑</span>
+          <span class="mm-title">{{ t('mindmap.title') }}</span>
           <Dropdown :options="LAYOUTS" :model-value="layout" @update:model-value="applyLayout" />
           <Dropdown :options="THEMES" :model-value="themeName" @update:model-value="applyTheme" />
-          <span class="mm-hint">Tab 子节点 · Enter 兄弟 · 双击编辑 · Ctrl+Z 撤销</span>
+          <span class="mm-hint">{{ t('mindmap.hint') }}</span>
           <span class="mm-spacer"></span>
           <span v-if="uiFeedback" class="mm-feedback">{{ uiFeedback }}</span>
-          <UxButton size="sm" variant="ghost" label="复制大纲为 Markdown" @click="copyOutline">
+          <UxButton size="sm" variant="ghost" :label="t('mindmap.copyOutlineTitle')" @click="copyOutline">
             <template #icon><ClipboardCopy :size="13" /></template>
-            复制大纲
+            {{ t('mindmap.copyOutline') }}
           </UxButton>
-          <UxButton size="sm" variant="ghost" label="导出为 JSON" @click="exportJson">
+          <UxButton size="sm" variant="ghost" :label="t('mindmap.exportJson')" @click="exportJson">
             <template #icon><FileJson :size="13" /></template>
             JSON
           </UxButton>
-          <UxButton size="sm" variant="ghost" label="导出为 SVG" @click="exportImage('svg')">
+          <UxButton size="sm" variant="ghost" :label="t('mindmap.exportSvg')" @click="exportImage('svg')">
             <template #icon><FileDown :size="13" /></template>
             SVG
           </UxButton>
-          <UxButton size="sm" variant="ghost" label="导出为 PNG" @click="exportImage('png')">
+          <UxButton size="sm" variant="ghost" :label="t('mindmap.exportPng')" @click="exportImage('png')">
             <template #icon><ImageDown :size="13" /></template>
             PNG
           </UxButton>
-          <UxButton size="sm" variant="ghost" label="取消" @click="cancel">
+          <UxButton size="sm" variant="ghost" :label="t('mindmap.cancel')" @click="cancel">
             <template #icon><X :size="13" /></template>
-            取消
+            {{ t('mindmap.cancel') }}
           </UxButton>
-          <UxButton size="sm" variant="primary" label="保存到文档" @click="confirm">
+          <UxButton size="sm" variant="primary" :label="t('mindmap.save')" @click="confirm">
             <template #icon><Save :size="13" /></template>
-            保存到文档
+            {{ t('mindmap.save') }}
           </UxButton>
         </div>
         <div class="mm-stage">
           <div ref="mapEl" class="mm-canvas"></div>
           <div class="mm-controls">
-            <button class="mm-ctrl" title="放大" @click="zoomIn"><ZoomIn :size="14" /></button>
-            <button class="mm-ctrl" title="缩小" @click="zoomOut"><ZoomOut :size="14" /></button>
-            <button class="mm-ctrl" title="适应屏幕" @click="fitView"><Maximize :size="14" /></button>
-            <button class="mm-ctrl" title="居中" @click="centerView"><LocateFixed :size="14" /></button>
-            <button class="mm-ctrl" :class="{ on: helpOpen }" title="快捷键" @click="helpOpen = !helpOpen">
+            <button class="mm-ctrl" :title="t('mindmap.zoomIn')" @click="zoomIn"><ZoomIn :size="14" /></button>
+            <button class="mm-ctrl" :title="t('mindmap.zoomOut')" @click="zoomOut"><ZoomOut :size="14" /></button>
+            <button class="mm-ctrl" :title="t('mindmap.fit')" @click="fitView"><Maximize :size="14" /></button>
+            <button class="mm-ctrl" :title="t('mindmap.center')" @click="centerView"><LocateFixed :size="14" /></button>
+            <button class="mm-ctrl" :class="{ on: helpOpen }" :title="t('mindmap.shortcuts')" @click="helpOpen = !helpOpen">
               <CircleHelp :size="14" />
             </button>
           </div>
           <div v-if="helpOpen" class="mm-help">
             <div class="mm-help-head">
-              <span>快捷键</span>
+              <span>{{ t('mindmap.shortcuts') }}</span>
               <button class="mm-ctrl" @click="helpOpen = false"><X :size="12" /></button>
             </div>
             <div v-for="[k, d] in SHORTCUTS" :key="k" class="mm-help-row">

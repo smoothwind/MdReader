@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+
 export function mdListToTree(text) {
   const lines = (text || '').split('\n').filter((l) => l.trim())
   const tops = []
@@ -19,7 +21,7 @@ export function mdListToTree(text) {
     else stack[stack.length - 1].children.push(node)
     stack.push(node)
   }
-  if (tops.length === 0) return { id: 'n0', topic: '脑图', children: [] }
+  if (tops.length === 0) return { id: 'n0', topic: t('mindmap.fileName'), children: [] }
   if (tops.length === 1) return tops[0]
   const root = tops[0]
   root.children = [...(root.children || []), ...tops.slice(1)]

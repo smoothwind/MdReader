@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { t } from '../i18n'
 
 const SEARCH_COLLECT_MS = 200
 const SEARCH_RECOLLECT_MS = 250
@@ -48,7 +49,7 @@ export function useSearch({ getRootEl, getScroller, notify, selectRange }) {
     searchMatches = []
     const matcher = buildMatcher(search)
     if (!root || !matcher) {
-      if (root && search.query) search.info = '正则无效'
+      if (root && search.query) search.info = t('search.invalidRegex')
       return searchMatches
     }
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
@@ -80,7 +81,7 @@ export function useSearch({ getRootEl, getScroller, notify, selectRange }) {
       return
     }
     if (!searchMatches.length) {
-      search.info = '无结果'
+      search.info = t('search.noResult')
       search.index = 0
       return
     }
@@ -215,7 +216,7 @@ export function useSearch({ getRootEl, getScroller, notify, selectRange }) {
       if (count % REPLACE_ALL_YIELD_EVERY === 0) await new Promise((r) => setTimeout(r, 0))
     }
     scheduleCollect(false)
-    notify(count > 0 ? `已替换 ${count} 处` : '未找到匹配内容')
+    notify(count > 0 ? t('search.replaced', { count }) : t('search.noMatches'))
   }
 
   function dispose() {

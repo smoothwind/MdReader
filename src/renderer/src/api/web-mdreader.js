@@ -7,6 +7,8 @@
  * 与 preload / tauri 适配器保持同一接口契约（方法名、参数、返回结构、事件通道名）。
  */
 
+import { t } from '../i18n'
+
 const DOCS_KEY = 'mdreader:web:docs'
 
 function loadDocs() {
@@ -41,11 +43,14 @@ function download(bytes, name) {
 
 const noop = () => {}
 const noopDispose = () => noop
-const UNSUPPORTED_IMAGE = { ok: false, message: 'Web 演示版暂不支持插入本地图片，请使用桌面版' }
+const unsupportedImage = () => ({ ok: false, message: t('web.imageUnsupported') })
 
 if (typeof window !== 'undefined' && !window.mdreader) {
   window.mdreader = {
     runtime: 'web',
+
+    // 浏览器演示版没有原生菜单，语言仅作用于渲染层
+    setLocale: (locale) => Promise.resolve({ locale }),
 
     openDialog: () =>
       new Promise((resolve) => {
@@ -70,7 +75,7 @@ if (typeof window !== 'undefined' && !window.mdreader) {
     readPath: (path) => {
       const docs = loadDocs()
       const name = String(path || '').replace(/^web:/, '')
-      if (!(name in docs)) return Promise.reject(new Error('文档不存在：' + name))
+      if (!(name in docs)) return Promise.reject(new Error(t('web.docMissing', { name })))
       return Promise.resolve({ path: 'web:' + name, name, content: docs[name] })
     },
 
@@ -91,7 +96,7 @@ if (typeof window !== 'undefined' && !window.mdreader) {
         window.dispatchEvent(new CustomEvent('mdreader:web-open', { detail: 'web:' + name }))
         return Promise.resolve()
       }
-      window.alert('演示版没有该文档：' + name)
+      window.alert(t('web.noSuchDoc', { name }))
       return Promise.resolve()
     },
 
@@ -104,7 +109,7 @@ if (typeof window !== 'undefined' && !window.mdreader) {
     },
 
     saveAs: (content, name) => {
-      const fileName = String(name || '未命名.md')
+      const fileName = String(name || `${t('common.untitled')}.md`)
       download(new TextEncoder().encode(content), fileName)
       const docs = loadDocs()
       docs[fileName] = content
@@ -120,8 +125,8 @@ if (typeof window !== 'undefined' && !window.mdreader) {
     // WebView 与桌面端不同：无静默 PDF 能力，渲染层会降级走 window.print()
     exportPdf: () => Promise.resolve({ unsupported: true }),
 
-    importAsset: () => Promise.resolve(UNSUPPORTED_IMAGE),
-    saveImageAsset: () => Promise.resolve(UNSUPPORTED_IMAGE),
+    importAsset: () => Promise.resolve(unsupportedImage()),
+    saveImageAsset: () => Promise.resolve(unsupportedImage()),
 
     openFolderDialog: () => Promise.resolve({ canceled: true }),
     listDir: () => Promise.resolve({ entries: [] }),

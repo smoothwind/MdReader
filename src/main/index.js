@@ -5,10 +5,11 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { RecentFiles } from './recent.js'
 import { loadPerfConfig, applyPerfConfig, savePerfConfig } from './perf.js'
+import { getMainLocale, initMainLocale, mt, setMainLocale } from './i18n.js'
 
-const MD_FILTERS = [
-  { name: 'Markdown 文件', extensions: ['md', 'markdown', 'mdown', 'mkd'] },
-  { name: '所有文件', extensions: ['*'] }
+const mdFilters = () => [
+  { name: mt('dialog.filterMd'), extensions: ['md', 'markdown', 'mdown', 'mkd'] },
+  { name: mt('dialog.filterAll'), extensions: ['*'] }
 ]
 
 const MD_EXT_RE = /\.(md|markdown|mdown|mkd)$/i
@@ -35,7 +36,7 @@ const doc = { dirty: false, anyDirty: false, filePath: null, fileName: '' }
 const send = (channel, ...args) => win?.webContents.send(channel, ...args)
 
 function windowTitle() {
-  return `${doc.dirty ? '● ' : ''}${doc.fileName || '未命名'} - MdReader`
+  return `${doc.dirty ? '● ' : ''}${doc.fileName || mt('app.unnamed')} - MdReader`
 }
 
 function pathFromArgv(argv) {
@@ -67,7 +68,7 @@ async function openLocalHref(href, docPath) {
       /* keep raw */
     }
     if (!isAbsolute(p)) {
-      if (!docPath) return { ok: false, message: '当前文档尚未保存到磁盘，无法解析相对链接' }
+      if (!docPath) return { ok: false, message: mt('link.noDocPath') }
       p = resolve(dirname(docPath), p)
     }
   }
@@ -77,7 +78,7 @@ async function openLocalHref(href, docPath) {
   } catch {
     exists = false
   }
-  if (!exists) return { ok: false, message: '文件不存在：' + p }
+  if (!exists) return { ok: false, message: mt('link.notFound', { path: p }) }
   if (MD_EXT_RE.test(p)) {
     send('doc:open-path', p)
     return { ok: true }
@@ -198,10 +199,10 @@ function createWindow(startPath) {
     e.preventDefault()
     const { response } = await dialog.showMessageBox(win, {
       type: 'warning',
-      title: 'MdReader',
-      message: '有未保存的更改，是否保存后退出？',
-      detail: '将保存所有修改过的文档。',
-      buttons: ['保存全部', '不保存', '取消'],
+      title: mt('exit.title'),
+      message: mt('exit.message'),
+      detail: mt('exit.detail'),
+      buttons: [mt('exit.saveAll'), mt('exit.dontSave'), mt('exit.cancel')],
       defaultId: 0,
       cancelId: 2,
       noLink: true
@@ -230,99 +231,106 @@ function rebuildMenu() {
 
   const recentSub = recent.items.length
     ? recent.items.map((p) => ({ label: p, click: () => send('doc:open-recent', p) }))
-    : [{ label: '（暂无记录）', enabled: false }]
+    : [{ label: mt('menu.noRecent'), enabled: false }]
 
   const template = [
     {
-      label: '文件',
+      label: mt('menu.file'),
       submenu: [
-        { label: '新建', accelerator: 'CmdOrCtrl+N', click: action('file:new') },
-        { label: '打开…', accelerator: 'CmdOrCtrl+O', click: action('file:open') },
-        { label: '最近打开', submenu: recentSub },
+        { label: mt('menu.new'), accelerator: 'CmdOrCtrl+N', click: action('file:new') },
+        { label: mt('menu.open'), accelerator: 'CmdOrCtrl+O', click: action('file:open') },
+        { label: mt('menu.recent'), submenu: recentSub },
         { type: 'separator' },
-        { label: '保存', accelerator: 'CmdOrCtrl+S', click: action('file:save') },
-        { label: '另存为…', accelerator: 'CmdOrCtrl+Shift+S', click: action('file:save-as') },
+        { label: mt('menu.save'), accelerator: 'CmdOrCtrl+S', click: action('file:save') },
+        { label: mt('menu.saveAs'), accelerator: 'CmdOrCtrl+Shift+S', click: action('file:save-as') },
         { type: 'separator' },
-        { label: '导出 HTML…', click: action('file:export-html') },
-        { label: '导出 Word 文档…', click: action('file:export-word') },
-        { label: '导出长图…', click: action('file:export-image') },
-        { label: '导出 PDF…', click: action('file:export-pdf') },
-        { label: '打印 / 导出 PDF', accelerator: 'CmdOrCtrl+P', click: action('file:print') },
+        { label: mt('menu.exportHtml'), click: action('file:export-html') },
+        { label: mt('menu.exportWord'), click: action('file:export-word') },
+        { label: mt('menu.exportImage'), click: action('file:export-image') },
+        { label: mt('menu.exportPdf'), click: action('file:export-pdf') },
+        { label: mt('menu.print'), accelerator: 'CmdOrCtrl+P', click: action('file:print') },
         { type: 'separator' },
         {
-          label: '在资源管理器中显示',
+          label: mt('menu.reveal'),
           enabled: !!doc.filePath,
           click: () => doc.filePath && shell.showItemInFolder(doc.filePath)
         },
         { type: 'separator' },
-        { role: 'quit', label: '退出' }
+        { role: 'quit', label: mt('menu.quit') }
       ]
     },
     {
-      label: '编辑',
+      label: mt('menu.edit'),
       submenu: [
-        { role: 'undo', label: '撤销' },
-        { role: 'redo', label: '重做' },
+        { role: 'undo', label: mt('menu.undo') },
+        { role: 'redo', label: mt('menu.redo') },
         { type: 'separator' },
-        { role: 'cut', label: '剪切' },
-        { role: 'copy', label: '复制' },
-        { role: 'paste', label: '粘贴' },
-        { role: 'selectAll', label: '全选' },
+        { role: 'cut', label: mt('menu.cut') },
+        { role: 'copy', label: mt('menu.copy') },
+        { role: 'paste', label: mt('menu.paste') },
+        { role: 'selectAll', label: mt('menu.selectAll') },
         { type: 'separator' },
-        { label: '查找…', accelerator: 'CmdOrCtrl+F', click: action('edit:find') },
-        { label: '替换…', accelerator: 'CmdOrCtrl+H', click: action('edit:replace') }
+        { label: mt('menu.find'), accelerator: 'CmdOrCtrl+F', click: action('edit:find') },
+        { label: mt('menu.replace'), accelerator: 'CmdOrCtrl+H', click: action('edit:replace') }
       ]
     },
     {
-      label: '插入',
+      label: mt('menu.insert'),
+      submenu: [{ label: mt('menu.mindmap'), accelerator: 'CmdOrCtrl+M', click: action('insert:mindmap') }]
+    },
+    {
+      label: mt('menu.format'),
       submenu: [
-        { label: '脑图…', accelerator: 'CmdOrCtrl+M', click: action('insert:mindmap') }
+        { label: mt('menu.bold'), accelerator: 'CmdOrCtrl+B', click: action('fmt:bold') },
+        { label: mt('menu.italic'), accelerator: 'CmdOrCtrl+I', click: action('fmt:italic') },
+        { label: mt('menu.underline'), accelerator: 'CmdOrCtrl+U', click: action('fmt:underline') },
+        { label: mt('menu.strike'), accelerator: 'CmdOrCtrl+Shift+X', click: action('fmt:strikeThrough') },
+        { type: 'separator' },
+        { label: mt('menu.superscript'), accelerator: 'Ctrl+Shift+=', click: action('fmt:superscript') },
+        { label: mt('menu.subscript'), accelerator: 'Ctrl+=', click: action('fmt:subscript') },
+        { label: mt('menu.highlight'), click: action('fmt:highlight') },
+        { label: mt('menu.wavy'), click: action('fmt:wavy') },
+        { type: 'separator' },
+        { label: mt('menu.removeFormat'), accelerator: 'CmdOrCtrl+\\', click: action('fmt:removeFormat') }
       ]
     },
     {
-      label: '格式',
+      label: mt('menu.view'),
       submenu: [
-        { label: '加粗', accelerator: 'CmdOrCtrl+B', click: action('fmt:bold') },
-        { label: '斜体', accelerator: 'CmdOrCtrl+I', click: action('fmt:italic') },
-        { label: '下划线', accelerator: 'CmdOrCtrl+U', click: action('fmt:underline') },
-        { label: '删除线', accelerator: 'CmdOrCtrl+Shift+X', click: action('fmt:strikeThrough') },
-        { type: 'separator' },
-        { label: '上标', accelerator: 'Ctrl+Shift+=', click: action('fmt:superscript') },
-        { label: '下标', accelerator: 'Ctrl+=', click: action('fmt:subscript') },
-        { label: '高亮', click: action('fmt:highlight') },
-        { label: '波浪线', click: action('fmt:wavy') },
-        { type: 'separator' },
-        { label: '清除格式', accelerator: 'CmdOrCtrl+\\', click: action('fmt:removeFormat') }
-      ]
-    },
-    {
-      label: '视图',
-          submenu: [
-            { label: '查看全文 Markdown', click: action('view:doc-source') },
-            { label: '文件树', type: 'checkbox', checked: prefs.showFileTree === true, click: action('view:file-tree') },
-            { type: 'separator' },
-            { label: '浅色主题', type: 'radio', checked: prefs.theme === 'light', click: action('theme', 'light') },
-            { label: '深色主题', type: 'radio', checked: prefs.theme === 'dark', click: action('theme', 'dark') },
-            { type: 'separator' },
-        { role: 'zoomIn', label: '放大' },
-        { role: 'zoomOut', label: '缩小' },
-        { role: 'resetZoom', label: '重置缩放' },
-        { type: 'separator' },
-        { role: 'togglefullscreen', label: '全屏' },
-        { role: 'toggleDevTools', label: '开发者工具' }
-      ]
-    },
-    {
-      label: '帮助',
-      submenu: [
+        { label: mt('menu.docSource'), click: action('view:doc-source') },
         {
-          label: '更新日志',
-          click: action('help:changelog')
+          label: mt('menu.fileTree'),
+          type: 'checkbox',
+          checked: prefs.showFileTree === true,
+          click: action('view:file-tree')
+        },
+        { type: 'separator' },
+        {
+          label: mt('menu.lightTheme'),
+          type: 'radio',
+          checked: prefs.theme === 'light',
+          click: action('theme', 'light')
         },
         {
-          label: '关于 MdReader',
-          click: action('about')
-        }
+          label: mt('menu.darkTheme'),
+          type: 'radio',
+          checked: prefs.theme === 'dark',
+          click: action('theme', 'dark')
+        },
+        { type: 'separator' },
+        { role: 'zoomIn', label: mt('menu.zoomIn') },
+        { role: 'zoomOut', label: mt('menu.zoomOut') },
+        { role: 'resetZoom', label: mt('menu.resetZoom') },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: mt('menu.fullscreen') },
+        { role: 'toggleDevTools', label: mt('menu.devTools') }
+      ]
+    },
+    {
+      label: mt('menu.help'),
+      submenu: [
+        { label: mt('menu.changelog'), click: action('help:changelog') },
+        { label: mt('menu.about'), click: action('about') }
       ]
     }
   ]
@@ -333,9 +341,9 @@ function rebuildMenu() {
 function registerIpc() {
   ipcMain.handle('file:open-dialog', async () => {
     const r = await dialog.showOpenDialog(win, {
-      title: '打开 Markdown 文件',
+      title: mt('dialog.openMd'),
       properties: ['openFile'],
-      filters: MD_FILTERS
+      filters: mdFilters()
     })
     if (r.canceled || !r.filePaths.length) return { canceled: true }
     const p = r.filePaths[0]
@@ -373,7 +381,7 @@ function registerIpc() {
 
   ipcMain.handle('asset:import', async (_e, { src, docPath }) => {
     try {
-      if (!docPath) return { ok: false, message: '请先保存文档' }
+      if (!docPath) return { ok: false, message: mt('error.needSave') }
       const ext = (src.match(/(\.[a-z0-9]+)$/i) || ['', 'png'])[1].toLowerCase()
       const dir = join(dirname(docPath), 'assets')
       await mkdir(dir, { recursive: true })
@@ -391,7 +399,7 @@ function registerIpc() {
   // 保存二进制图片（剪贴板粘贴）到文档旁 assets/，复用 importAsset 的命名规则
   ipcMain.handle('asset:save-bytes', async (_e, { docPath, data, ext }) => {
     try {
-      if (!docPath) return { ok: false, message: '请先保存文档' }
+      if (!docPath) return { ok: false, message: mt('error.needSave') }
       const safeExt = '.' + String(ext || 'png').replace(/[^a-z0-9]/gi, '').toLowerCase()
       const dir = join(dirname(docPath), 'assets')
       await mkdir(dir, { recursive: true })
@@ -409,7 +417,7 @@ function registerIpc() {
   // 列出 assets/ 中未被文档引用的文件（引用集合由渲染层从文档内容提取）
   ipcMain.handle('assets:check', async (_e, { docPath, referenced }) => {
     try {
-      if (!docPath) return { orphans: [], message: '请先保存文档' }
+      if (!docPath) return { orphans: [], message: mt('error.needSave') }
       const dir = join(dirname(docPath), 'assets')
       let names = []
       try {
@@ -447,7 +455,7 @@ function registerIpc() {
 
   ipcMain.handle('folder:open-dialog', async () => {
     const r = await dialog.showOpenDialog(win, {
-      title: '打开文件夹',
+      title: mt('dialog.openFolder'),
       properties: ['openDirectory']
     })
     if (r.canceled || !r.filePaths.length) return { canceled: true }
@@ -468,7 +476,9 @@ function registerIpc() {
         }
       }
       entries.sort((a, b) =>
-        a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name, 'zh-CN')
+        a.isDir !== b.isDir
+          ? (a.isDir ? -1 : 1)
+          : a.name.localeCompare(b.name, getMainLocale() === 'zh-CN' ? 'zh-CN' : 'en-US')
       )
       return { entries }
     } catch (err) {
@@ -484,9 +494,9 @@ function registerIpc() {
 
   ipcMain.handle('file:save-as', async (_e, { content, name }) => {
     const r = await dialog.showSaveDialog(win, {
-      title: '另存为',
-      defaultPath: join(app.getPath('documents'), name || '未命名.md'),
-      filters: MD_FILTERS
+      title: mt('dialog.saveAs'),
+      defaultPath: join(app.getPath('documents'), name || `${mt('app.unnamed')}.md`),
+      filters: mdFilters()
     })
     if (r.canceled || !r.filePath) return { canceled: true }
     await atomicWriteFile(r.filePath, content)
@@ -497,9 +507,9 @@ function registerIpc() {
 
   ipcMain.handle('export:save', async (_e, { data, name, ext, extName }) => {
     const r = await dialog.showSaveDialog(win, {
-      title: '导出',
+      title: mt('dialog.export'),
       defaultPath: join(app.getPath('documents'), name || 'export.' + (ext || 'png')),
-      filters: [{ name: extName || ext || '文件', extensions: [ext || 'png'] }]
+      filters: [{ name: extName || ext || mt('dialog.filterFile'), extensions: [ext || 'png'] }]
     })
     if (r.canceled || !r.filePath) return { canceled: true }
     await atomicWriteFile(r.filePath, Buffer.from(data))
@@ -510,9 +520,12 @@ function registerIpc() {
   ipcMain.handle('pdf:export', async () => {
     if (!win) return { canceled: true }
     const r = await dialog.showSaveDialog(win, {
-      title: '导出 PDF',
-      defaultPath: join(app.getPath('documents'), (doc.fileName || '未命名').replace(MD_EXT_RE, '') + '.pdf'),
-      filters: [{ name: 'PDF 文档', extensions: ['pdf'] }]
+      title: mt('dialog.exportPdf'),
+      defaultPath: join(
+        app.getPath('documents'),
+        (doc.fileName || mt('app.unnamed')).replace(MD_EXT_RE, '') + '.pdf'
+      ),
+      filters: [{ name: mt('dialog.filterPdf'), extensions: ['pdf'] }]
     })
     if (r.canceled || !r.filePath) return { canceled: true }
     const buf = await withTimeout(
@@ -523,7 +536,7 @@ function registerIpc() {
         margins: { top: 0.625, bottom: 0.625, left: 0.625, right: 0.625 }
       }),
       30_000,
-      '导出超时：渲染进程未响应，请重试'
+      mt('dialog.exportTimeout')
     )
     await atomicWriteFile(r.filePath, buf)
     return { canceled: false, path: r.filePath }
@@ -543,9 +556,9 @@ function registerIpc() {
   ipcMain.handle('tab:confirm-close', async (_e, name) => {
     const { response } = await dialog.showMessageBox(win, {
       type: 'warning',
-      title: '关闭标签',
-      message: `是否保存对 "${name || '未命名'}" 的更改？`,
-      buttons: ['保存', '不保存', '取消'],
+      title: mt('dialog.closeTab'),
+      message: mt('dialog.closeTabMessage', { name: name || mt('app.unnamed') }),
+      buttons: [mt('dialog.save'), mt('dialog.dontSave'), mt('dialog.cancel')],
       defaultId: 0,
       cancelId: 2,
       noLink: true
@@ -575,6 +588,14 @@ function registerIpc() {
 
   ipcMain.handle('perf:get', () => loadPerfConfig())
   ipcMain.handle('perf:set', async (_e, partial) => savePerfConfig(partial || {}))
+
+  ipcMain.handle('app:set-locale', (_e, locale) => {
+    setMainLocale(locale)
+    if (win && !win.isDestroyed()) win.setTitle(windowTitle())
+    rebuildMenu()
+    rebuildTrayMenu()
+    return { locale: getMainLocale() }
+  })
   ipcMain.on('app:relaunch', () => {
     exiting = true
     forceClose = true
@@ -610,16 +631,19 @@ function showMainWindow() {
   win.focus()
 }
 
-function createTray() {
-  const icon = nativeImage.createFromPath(TRAY_ICON)
-  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)
-  tray.setToolTip('MdReader - Markdown 编辑器')
-  const menu = Menu.buildFromTemplate([
-    { label: '显示 / 隐藏窗口', click: () => toggleMainWindow() },
-    { label: '新建文件', click: () => { showMainWindow(); send('menu:action', 'file:new') } },
+function trayMenuTemplate() {
+  return [
+    { label: mt('tray.showHide'), click: () => toggleMainWindow() },
+    {
+      label: mt('tray.newFile'),
+      click: () => {
+        showMainWindow()
+        send('menu:action', 'file:new')
+      }
+    },
     { type: 'separator' },
     {
-      label: '退出',
+      label: mt('tray.quit'),
       click: () => {
         exiting = true
         forceClose = false
@@ -627,8 +651,19 @@ function createTray() {
         else app.quit()
       }
     }
-  ])
-  tray.setContextMenu(menu)
+  ]
+}
+
+function rebuildTrayMenu() {
+  if (!tray) return
+  tray.setToolTip(mt('tray.tooltip'))
+  tray.setContextMenu(Menu.buildFromTemplate(trayMenuTemplate()))
+}
+
+function createTray() {
+  const icon = nativeImage.createFromPath(TRAY_ICON)
+  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)
+  rebuildTrayMenu()
   tray.on('click', () => toggleMainWindow())
 }
 
@@ -658,6 +693,7 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     app.setAppUserModelId('com.qiuyj.mdreader')
+    initMainLocale(app.getLocale())
     recent = new RecentFiles()
     await recent.load()
     registerIpc()

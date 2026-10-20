@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { store } from '../store'
 import { ChevronsRight } from 'lucide-vue-next'
+import { t } from '../i18n'
 
 defineEmits(['jump'])
 
@@ -21,8 +22,8 @@ function toggle() {
   <div v-if="store.toc.length">
     <div v-if="!collapsed" class="toc-panel">
       <div class="toc-head">
-        <span>目录</span>
-        <button class="toc-toggle" title="收起目录" @click="toggle">
+        <span>{{ t('toc.title') }}</span>
+        <button class="toc-toggle" :title="t('toc.collapse')" @click="toggle">
           <ChevronsRight :size="14" />
         </button>
       </div>
@@ -39,6 +40,6 @@ function toggle() {
         </button>
       </div>
     </div>
-    <button v-else class="toc-collapsed-btn" title="展开目录" @click="toggle">目录</button>
+    <button v-else class="toc-collapsed-btn" :title="t('toc.expand')" @click="toggle">{{ t('toc.title') }}</button>
   </div>
 </template>

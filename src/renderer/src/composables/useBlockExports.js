@@ -1,5 +1,6 @@
 import { dataUrlToBytes, svgToPngBytes, exportBytes } from '../utils/exporters'
 import { codeBlockText } from '../utils/dom-blocks'
+import { t } from '../i18n'
 
 /**
  * 块级导出：代码块 / 表格 / 图表 PNG、表格 Excel。
@@ -20,9 +21,9 @@ export function useBlockExports({
   async function exportCodeImage() {
     const bar = getBar()
     const block = resolveCodeBlock()
-    if (!block) return notify('未找到代码块')
+    if (!block) return notify(t('editor.codeBlockNotFound'))
     const text = codeBlockText(block).replace(/\s+$/, '')
-    if (!text.trim()) return notify('代码块为空')
+    if (!text.trim()) return notify(t('editor.codeBlockEmpty'))
     try {
       const { toPng } = await import('html-to-image')
       const holder = document.createElement('div')
@@ -52,12 +53,12 @@ export function useBlockExports({
       const data = await dataUrlToBytes(await toPng(pre, { pixelRatio: 2 }))
       holder.remove()
       const tag = bar.language ? '-' + bar.language : ''
-      await exportBytes(data, `${baseName()}-code${tag}-${bar.index + 1}.png`, 'png', 'PNG 图片', {
+      await exportBytes(data, `${baseName()}-code${tag}-${bar.index + 1}.png`, 'png', t('app.pngImage'), {
         notify,
-        okMsg: '已导出图片'
+        okMsg: t('editor.exportImageDone')
       })
     } catch {
-      notify('导出失败')
+      notify(t('common.exportFailed'))
     }
   }
 
@@ -68,12 +69,12 @@ export function useBlockExports({
     try {
       const { toPng } = await import('html-to-image')
       const data = await dataUrlToBytes(await toPng(table, { pixelRatio: 2, backgroundColor: themeBg() }))
-      await exportBytes(data, `${baseName()}-table-${bar.index + 1}.png`, 'png', 'PNG 图片', {
+      await exportBytes(data, `${baseName()}-table-${bar.index + 1}.png`, 'png', t('app.pngImage'), {
         notify,
-        okMsg: '已导出图片'
+        okMsg: t('editor.exportImageDone')
       })
     } catch {
-      notify('导出失败')
+      notify(t('common.exportFailed'))
     }
   }
 
@@ -85,12 +86,12 @@ export function useBlockExports({
       const XLSX = await import('xlsx')
       const wb = XLSX.utils.table_to_book(table, { raw: false })
       const data = new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }))
-      await exportBytes(data, `${baseName()}-table-${bar.index + 1}.xlsx`, 'xlsx', 'Excel 工作簿', {
+      await exportBytes(data, `${baseName()}-table-${bar.index + 1}.xlsx`, 'xlsx', t('editor.excelWorkbook'), {
         notify,
-        okMsg: '已导出 Excel'
+        okMsg: t('editor.exportExcelDone')
       })
     } catch {
-      notify('导出失败')
+      notify(t('common.exportFailed'))
     }
   }
 
@@ -101,12 +102,12 @@ export function useBlockExports({
     if (!svg) return
     try {
       const data = await svgToPngBytes(svg, themeBg())
-      await exportBytes(data, `${baseName()}-${lang}-${bar.index + 1}.png`, 'png', 'PNG 图片', {
+      await exportBytes(data, `${baseName()}-${lang}-${bar.index + 1}.png`, 'png', t('app.pngImage'), {
         notify,
-        okMsg: '已导出 PNG'
+        okMsg: t('editor.exportPngDone')
       })
     } catch {
-      notify('导出失败')
+      notify(t('common.exportFailed'))
     }
   }
 

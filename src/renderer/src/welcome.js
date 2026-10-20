@@ -1,6 +1,7 @@
 import { publicPath } from './utils/assets'
+import { locale } from './i18n'
 
-export const welcomeDoc = `# MdReader 功能简介
+const WELCOME_ZH = `# MdReader 功能简介
 
 所见即所得的 Markdown 桌面编辑器，支持 **实时渲染**、**Mermaid 图表** 与 **主题切换**。
 
@@ -108,3 +109,117 @@ sequenceDiagram
 
 > 提示：点击右上角按钮可切换 **主题**；把 .md 文件拖进窗口即可打开。
 `
+
+const WELCOME_EN = `# Welcome to MdReader
+
+A WYSIWYG Markdown desktop editor with **live rendering**, **Mermaid diagrams**, and **theme switching**.
+
+## Core features
+
+| Feature | Description |
+| --- | --- |
+| WYSIWYG editing | Type and see the result immediately, no preview pane needed |
+| Mermaid diagrams | Flowcharts, sequence diagrams, and Gantt charts rendered offline |
+| Themes | Light / dark, applied to both the UI and the content |
+| Outline | Right-side outline panel with click-to-jump and scroll sync |
+| Table tools | Hover a table to copy source, export image / Excel, or change style |
+| Code tools | Hover SQL / JSON blocks to beautify, minify, or copy |
+| Mind map | Render markmap code blocks as mind maps with an XMind-like canvas |
+| Diagram tools | Hover a Mermaid diagram to copy source or export a high-res PNG |
+| Links & images | Hover a link to copy its Markdown; dropped images are linked automatically |
+| File management | New / open / save / recent files / drag and drop |
+| Status bar | Live word count, save time, and file path |
+
+## Table enhancements
+
+Hover any table to show the toolbar at the top right:
+
+- **Copy source**: copy the table Markdown in one click
+- **Export image**: 2x PNG that adapts to the current theme background
+- **Export Excel**: generate a standard .xlsx file
+- **Style**: default / zebra / compact / plain, remembered per document
+
+| City | Population (10k) | GDP (100M CNY) |
+| --- | :---: | ---: |
+| Shanghai | 2487 | 47218 |
+| Beijing | 2185 | 43760 |
+| Shenzhen | 1779 | 34606 |
+
+## Code formatting
+
+Hover a \`sql\` or \`json\` code block to **beautify** (format + indent) or **minify** it from the top right:
+
+\`\`\`sql
+SELECT c.id, c.name, COUNT(o.id) AS orders FROM customers c JOIN orders o ON o.customer_id = c.id GROUP BY c.id, c.name HAVING COUNT(o.id) > 10 ORDER BY orders DESC;
+\`\`\`
+
+\`\`\`json
+{"name":"MdReader","features":["wysiwyg","mermaid","themes"],"config":{"theme":"light","toc":true}}
+\`\`\`
+
+## Diagram capabilities
+
+\`\`\`mermaid
+flowchart LR
+  A[Write Markdown] --> B[Live render]
+  B --> C[Export & share]
+\`\`\`
+
+\`\`\`mermaid
+sequenceDiagram
+  participant U as User
+  participant E as MdReader
+  U->>E: Hover a diagram
+  E-->>U: Copy source / export PNG
+\`\`\`
+
+## Mind map
+
+Write nested lists to render a zoomable mind map; hover and click **Edit** to modify it on an XMind-like canvas (Tab for a child, Enter for a sibling, double-click to rename, drag to move, right-click for the context menu), then save it back to the Markdown list.
+
+\`\`\`markmap
+- MdReader
+  - Editor
+    - WYSIWYG
+    - Code enhancements
+  - Rendering
+    - Mermaid
+    - Mind map
+  - Export
+    - PNG / SVG
+    - Excel
+\`\`\`
+
+## Outline
+
+The right-side outline extracts document headings automatically: **click** to jump to a section, **scroll** to highlight the current one, and collapse it when you need more space.
+
+## Links & images
+
+**Links**: hover a link to inspect its address, validate anchors, and copy the Markdown source. External links open in the system browser, while \`# anchors\` jump inside this document:
+
+- [Vditor editor website](https://vditor.b3log.org)
+- [Markdown syntax guide](https://markdown.com.cn)
+- [Jump to: shortcuts](#shortcuts)
+
+**Images**: relative paths and remote URLs are supported. Drop an image file into the window and it is copied to the \`assets/\` folder next to the document with a reference inserted:
+
+![MdReader Logo](${publicPath('./vditor/dist/images/logo.png')})
+
+## Shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| **Ctrl + N** | New file |
+| **Ctrl + O** | Open file |
+| **Ctrl + S** | Save |
+| **Ctrl + Shift + S** | Save as |
+| **Ctrl + M** | Insert a mind map at the end of the document |
+
+> Tip: use the top-right buttons to switch the **theme**; drop a .md file into the window to open it.
+`
+
+/** 当前语言的欢迎文档（随界面语言切换） */
+export function getWelcomeDoc() {
+  return locale.value === 'en-US' ? WELCOME_EN : WELCOME_ZH
+}

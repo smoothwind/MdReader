@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { UxButton } from '@ux/components'
 import { store } from '../store'
+import { t } from '../i18n'
 import FileTreeNode from './FileTreeNode.vue'
 
 const TREE_REFRESH_MS = 5000
@@ -162,14 +163,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <aside class="file-tree" role="navigation" aria-label="文件树">
+  <aside class="file-tree" role="navigation" :aria-label="t('fileTree.title')">
     <div class="ft-head">
       <span class="ft-title" :title="root">
-        {{ root ? root.split(/[\\/]/).filter(Boolean).pop() : '文件树' }}
+        {{ root ? root.split(/[\\/]/).filter(Boolean).pop() : t('fileTree.title') }}
       </span>
-      <UxButton size="sm" variant="ghost" icon="obj-folder" label="打开文件夹" @click="pickRoot" />
-      <UxButton size="sm" variant="ghost" icon="act-retry" label="刷新" @click="reloadRoot" />
-      <UxButton size="sm" variant="ghost" icon="act-close" label="收起文件树" @click="emit('close')" />
+      <UxButton size="sm" variant="ghost" icon="obj-folder" :label="t('fileTree.openFolder')" @click="pickRoot" />
+      <UxButton size="sm" variant="ghost" icon="act-retry" :label="t('fileTree.refresh')" @click="reloadRoot" />
+      <UxButton size="sm" variant="ghost" icon="act-close" :label="t('fileTree.hide')" @click="emit('close')" />
     </div>
     <div ref="treeBody" class="ft-body">
       <FileTreeNode
@@ -177,8 +178,8 @@ onBeforeUnmount(() => {
         :node="rootEntry"
         @open="(p) => emit('open', p)"
       />
-      <div v-if="loading" class="ft-hint">加载中…</div>
-      <div v-else-if="!rootEntry" class="ft-hint">选择一个文件夹开始浏览</div>
+      <div v-if="loading" class="ft-hint">{{ t('fileTree.loading') }}</div>
+      <div v-else-if="!rootEntry" class="ft-hint">{{ t('fileTree.pickFolder') }}</div>
     </div>
   </aside>
 </template>

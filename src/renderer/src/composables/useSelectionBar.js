@@ -1,4 +1,5 @@
 import { nextTick, reactive, ref } from 'vue'
+import { t } from '../i18n'
 
 const SELBAR_DELAY_MS = 120
 
@@ -157,14 +158,14 @@ export function useSelectionBar({ getRootEl, notify, copyText }) {
     const holder = document.createElement('div')
     for (let i = 0; i < sel.rangeCount; i++) holder.appendChild(sel.getRangeAt(i).cloneContents())
     const lute = window.Lute?.New?.()
-    if (!lute) return notify('转换引擎未就绪，请稍后重试')
+    if (!lute) return notify(t('editor.blockConvertNotReady'))
     let md
     try {
       md = (lute.HTML2Md(holder.innerHTML) || '').trim()
     } catch {
-      return notify('转换失败')
+      return notify(t('editor.convertFailed'))
     }
-    notify((await copyText(md)) ? 'Markdown 已复制' : '复制失败')
+    notify((await copyText(md)) ? t('editor.mdCopied') : t('common.copyFailed'))
   }
 
   function dispose() {

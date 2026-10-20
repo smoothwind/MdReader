@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { useSearch } from './useSearch'
+import { setLocale } from '../i18n'
 
 const mockSel = {
   ranges: [],
@@ -21,6 +22,8 @@ const mockSel = {
 }
 
 beforeAll(() => {
+  // 文案断言基于中文词典；locale 默认跟随 jsdom 的 navigator.language
+  setLocale('zh-CN', { persist: false, notifyNative: false })
   window.getSelection = () => mockSel
   Element.prototype.scrollIntoView = vi.fn()
   // 模拟 execCommand('insertText')：按当前选区执行真实文本替换

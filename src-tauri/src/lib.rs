@@ -24,6 +24,15 @@ impl<T> LockExt<T> for Mutex<T> {
 }
 
 const APP_NAME: &str = "MdReader";
+
+/// 原生菜单/托盘文案：zh 为中文，en 为英文；当前语言由渲染层同步。
+fn tr<'a>(locale: &str, zh: &'a str, en: &'a str) -> &'a str {
+    if locale == "en-US" {
+        en
+    } else {
+        zh
+    }
+}
 const MD_EXTS: [&str; 4] = ["md", "markdown", "mdown", "mkd"];
 const RECENT_MAX: usize = 12;
 const FILE_POLL_MS: u64 = 2000;
@@ -72,6 +81,7 @@ struct AppState {
     watch_paths: Mutex<Vec<String>>,
     exiting: Mutex<bool>,
     zoom: Mutex<f64>,
+    locale: Mutex<String>,
 }
 
 fn app_start() -> &'static Instant {
@@ -213,10 +223,15 @@ fn toggle_main(app: &AppHandle) {
 
 fn set_doc_title(app: &AppHandle, dirty: bool, file_name: &str) {
     if let Some(w) = main_window(app) {
+        let locale = app.state::<AppState>().locale.lock_ok().clone();
         let _ = w.set_title(&format!(
             "{}{} - {}",
             if dirty { "● " } else { "" },
-            if file_name.is_empty() { "未命名" } else { file_name },
+            if file_name.is_empty() {
+                tr(&locale, "未命名", "Untitled")
+            } else {
+                file_name
+            },
             APP_NAME
         ));
     }
@@ -229,11 +244,19 @@ fn build_menu(app: &AppHandle) -> tauri::Result<()> {
     let theme = state.prefs.lock_ok().theme.clone();
     let has_file = state.doc.lock_ok().file_path.is_some();
     let recent = state.recent.lock_ok().clone();
+    let locale = state.locale.lock_ok().clone();
 
-    let file = tauri::menu::Submenu::with_id(app, "m-file", "文件", true)?;
-    let recent_menu = tauri::menu::Submenu::with_id(app, "m-recent", "最近打开", true)?;
+    let file = tauri::menu::Submenu::with_id(app, "m-file", tr(&locale, "文件", "File"), true)?;
+    let recent_menu =
+        tauri::menu::Submenu::with_id(app, "m-recent", tr(&locale, "最近打开", "Open Recent"), true)?;
     if recent.is_empty() {
-        recent_menu.append(&tauri::menu::MenuItem::with_id(app, "recent-empty", "（暂无记录）", false, None::<&str>)?)?;
+        recent_menu.append(&tauri::menu::MenuItem::with_id(
+            app,
+            "recent-empty",
+            tr(&locale, "（暂无记录）", "(No recent files)"),
+            false,
+            None::<&str>,
+        )?)?;
     } else {
         for (i, p) in recent.iter().enumerate() {
             recent_menu.append(&tauri::menu::MenuItem::with_id(
@@ -247,25 +270,67 @@ fn build_menu(app: &AppHandle) -> tauri::Result<()> {
     }
 
     file.append_items(&[
-        &tauri::menu::MenuItem::with_id(app, "file-new", "新建", true, Some("CmdOrCtrl+N"))?,
-        &tauri::menu::MenuItem::with_id(app, "file-open", "打开…", true, Some("CmdOrCtrl+O"))?,
+        &tauri::menu::MenuItem::with_id(app, "file-new", tr(&locale, "新建", "New"), true, Some("CmdOrCtrl+N"))?,
+        &tauri::menu::MenuItem::with_id(app, "file-open", tr(&locale, "打开…", "Open…"), true, Some("CmdOrCtrl+O"))?,
         &recent_menu,
         &tauri::menu::PredefinedMenuItem::separator(app)?,
-        &tauri::menu::MenuItem::with_id(app, "file-save", "保存", true, Some("CmdOrCtrl+S"))?,
-        &tauri::menu::MenuItem::with_id(app, "file-save-as", "另存为…", true, Some("CmdOrCtrl+Shift+S"))?,
+        &tauri::menu::MenuItem::with_id(app, "file-save", tr(&locale, "保存", "Save"), true, Some("CmdOrCtrl+S"))?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "file-save-as",
+            tr(&locale, "另存为…", "Save As…"),
+            true,
+            Some("CmdOrCtrl+Shift+S"),
+        )?,
         &tauri::menu::PredefinedMenuItem::separator(app)?,
-        &tauri::menu::MenuItem::with_id(app, "file-export-html", "导出 HTML…", true, None::<&str>)?,
-        &tauri::menu::MenuItem::with_id(app, "file-export-word", "导出 Word 文档…", true, None::<&str>)?,
-        &tauri::menu::MenuItem::with_id(app, "file-export-image", "导出长图…", true, None::<&str>)?,
-        &tauri::menu::MenuItem::with_id(app, "file-export-pdf", "导出 PDF…", true, None::<&str>)?,
-        &tauri::menu::MenuItem::with_id(app, "file-print", "打印 / 导出 PDF", true, Some("CmdOrCtrl+P"))?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "file-export-html",
+            tr(&locale, "导出 HTML…", "Export HTML…"),
+            true,
+            None::<&str>,
+        )?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "file-export-word",
+            tr(&locale, "导出 Word 文档…", "Export Word Document…"),
+            true,
+            None::<&str>,
+        )?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "file-export-image",
+            tr(&locale, "导出长图…", "Export Long Image…"),
+            true,
+            None::<&str>,
+        )?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "file-export-pdf",
+            tr(&locale, "导出 PDF…", "Export PDF…"),
+            true,
+            None::<&str>,
+        )?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "file-print",
+            tr(&locale, "打印 / 导出 PDF", "Print / Export PDF"),
+            true,
+            Some("CmdOrCtrl+P"),
+        )?,
         &tauri::menu::PredefinedMenuItem::separator(app)?,
-        &tauri::menu::MenuItem::with_id(app, "file-reveal", "在资源管理器中显示", has_file, None::<&str>)?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "file-reveal",
+            tr(&locale, "在资源管理器中显示", "Show in File Explorer"),
+            has_file,
+            None::<&str>,
+        )?,
         &tauri::menu::PredefinedMenuItem::separator(app)?,
-        &tauri::menu::MenuItem::with_id(app, "app-quit", "退出", true, Some("CmdOrCtrl+Q"))?,
+        &tauri::menu::MenuItem::with_id(app, "app-quit", tr(&locale, "退出", "Quit"), true, Some("CmdOrCtrl+Q"))?,
     ])?;
 
-    let edit = tauri::menu::Submenu::with_id(app, "m-edit", "编辑", true)?;
+    let edit = tauri::menu::Submenu::with_id(app, "m-edit", tr(&locale, "编辑", "Edit"), true)?;
     edit.append_items(&[
         &tauri::menu::PredefinedMenuItem::undo(app, None::<&str>)?,
         &tauri::menu::PredefinedMenuItem::redo(app, None::<&str>)?,
@@ -275,43 +340,92 @@ fn build_menu(app: &AppHandle) -> tauri::Result<()> {
         &tauri::menu::PredefinedMenuItem::paste(app, None::<&str>)?,
         &tauri::menu::PredefinedMenuItem::select_all(app, None::<&str>)?,
         &tauri::menu::PredefinedMenuItem::separator(app)?,
-        &tauri::menu::MenuItem::with_id(app, "edit-find", "查找…", true, Some("CmdOrCtrl+F"))?,
-        &tauri::menu::MenuItem::with_id(app, "edit-replace", "替换…", true, Some("CmdOrCtrl+H"))?,
+        &tauri::menu::MenuItem::with_id(app, "edit-find", tr(&locale, "查找…", "Find…"), true, Some("CmdOrCtrl+F"))?,
+        &tauri::menu::MenuItem::with_id(app, "edit-replace", tr(&locale, "替换…", "Replace…"), true, Some("CmdOrCtrl+H"))?,
     ])?;
 
-    let insert = tauri::menu::Submenu::with_id(app, "m-insert", "插入", true)?;
+    let insert = tauri::menu::Submenu::with_id(app, "m-insert", tr(&locale, "插入", "Insert"), true)?;
     insert.append_items(&[&tauri::menu::MenuItem::with_id(
         app,
         "insert-mindmap",
-        "脑图…",
+        tr(&locale, "脑图…", "Mind Map…"),
         true,
         Some("CmdOrCtrl+M"),
     )?])?;
 
-    let fmt = tauri::menu::Submenu::with_id(app, "m-fmt", "格式", true)?;
+    let fmt = tauri::menu::Submenu::with_id(app, "m-fmt", tr(&locale, "格式", "Format"), true)?;
     fmt.append_items(&[
-        &tauri::menu::MenuItem::with_id(app, "fmt-bold", "加粗", true, Some("CmdOrCtrl+B"))?,
-        &tauri::menu::MenuItem::with_id(app, "fmt-italic", "斜体", true, Some("CmdOrCtrl+I"))?,
-        &tauri::menu::MenuItem::with_id(app, "fmt-underline", "下划线", true, Some("CmdOrCtrl+U"))?,
-        &tauri::menu::MenuItem::with_id(app, "fmt-strike-through", "删除线", true, Some("CmdOrCtrl+Shift+X"))?,
+        &tauri::menu::MenuItem::with_id(app, "fmt-bold", tr(&locale, "加粗", "Bold"), true, Some("CmdOrCtrl+B"))?,
+        &tauri::menu::MenuItem::with_id(app, "fmt-italic", tr(&locale, "斜体", "Italic"), true, Some("CmdOrCtrl+I"))?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "fmt-underline",
+            tr(&locale, "下划线", "Underline"),
+            true,
+            Some("CmdOrCtrl+U"),
+        )?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "fmt-strike-through",
+            tr(&locale, "删除线", "Strikethrough"),
+            true,
+            Some("CmdOrCtrl+Shift+X"),
+        )?,
         &tauri::menu::PredefinedMenuItem::separator(app)?,
-        &tauri::menu::MenuItem::with_id(app, "fmt-superscript", "上标", true, Some("Ctrl+Shift+="))?,
-        &tauri::menu::MenuItem::with_id(app, "fmt-subscript", "下标", true, Some("Ctrl+="))?,
-        &tauri::menu::MenuItem::with_id(app, "fmt-highlight", "高亮", true, None::<&str>)?,
-        &tauri::menu::MenuItem::with_id(app, "fmt-wavy", "波浪线", true, None::<&str>)?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "fmt-superscript",
+            tr(&locale, "上标", "Superscript"),
+            true,
+            Some("Ctrl+Shift+="),
+        )?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "fmt-subscript",
+            tr(&locale, "下标", "Subscript"),
+            true,
+            Some("Ctrl+="),
+        )?,
+        &tauri::menu::MenuItem::with_id(app, "fmt-highlight", tr(&locale, "高亮", "Highlight"), true, None::<&str>)?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "fmt-wavy",
+            tr(&locale, "波浪线", "Wavy Underline"),
+            true,
+            None::<&str>,
+        )?,
         &tauri::menu::PredefinedMenuItem::separator(app)?,
-        &tauri::menu::MenuItem::with_id(app, "fmt-remove-format", "清除格式", true, Some("CmdOrCtrl+\\"))?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "fmt-remove-format",
+            tr(&locale, "清除格式", "Clear Formatting"),
+            true,
+            Some("CmdOrCtrl+\\"),
+        )?,
     ])?;
 
-    let view = tauri::menu::Submenu::with_id(app, "m-view", "视图", true)?;
+    let view = tauri::menu::Submenu::with_id(app, "m-view", tr(&locale, "视图", "View"), true)?;
     let show_tree = state.prefs.lock_ok().show_file_tree;
-    let doc_source = tauri::menu::MenuItem::with_id(app, "view-doc-source", "查看全文 Markdown", true, None::<&str>)?;
-    let file_tree = tauri::menu::CheckMenuItem::with_id(app, "view-file-tree", "文件树", true, show_tree, None::<&str>)?;
+    let doc_source = tauri::menu::MenuItem::with_id(
+        app,
+        "view-doc-source",
+        tr(&locale, "查看全文 Markdown", "View Full Markdown"),
+        true,
+        None::<&str>,
+    )?;
+    let file_tree = tauri::menu::CheckMenuItem::with_id(
+        app,
+        "view-file-tree",
+        tr(&locale, "文件树", "File Tree"),
+        true,
+        show_tree,
+        None::<&str>,
+    )?;
     let sep1 = tauri::menu::PredefinedMenuItem::separator(app)?;
     let theme_light = tauri::menu::CheckMenuItem::with_id(
         app,
         "theme-light",
-        "浅色主题",
+        tr(&locale, "浅色主题", "Light Theme"),
         true,
         theme == "light",
         None::<&str>,
@@ -319,17 +433,29 @@ fn build_menu(app: &AppHandle) -> tauri::Result<()> {
     let theme_dark = tauri::menu::CheckMenuItem::with_id(
         app,
         "theme-dark",
-        "深色主题",
+        tr(&locale, "深色主题", "Dark Theme"),
         true,
         theme == "dark",
         None::<&str>,
     )?;
     let sep2 = tauri::menu::PredefinedMenuItem::separator(app)?;
-    let zoom_in = tauri::menu::MenuItem::with_id(app, "zoom-in", "放大", true, Some("CmdOrCtrl+="))?;
-    let zoom_out = tauri::menu::MenuItem::with_id(app, "zoom-out", "缩小", true, Some("CmdOrCtrl+-"))?;
-    let zoom_reset = tauri::menu::MenuItem::with_id(app, "zoom-reset", "重置缩放", true, Some("CmdOrCtrl+0"))?;
+    let zoom_in = tauri::menu::MenuItem::with_id(app, "zoom-in", tr(&locale, "放大", "Zoom In"), true, Some("CmdOrCtrl+="))?;
+    let zoom_out = tauri::menu::MenuItem::with_id(app, "zoom-out", tr(&locale, "缩小", "Zoom Out"), true, Some("CmdOrCtrl+-"))?;
+    let zoom_reset = tauri::menu::MenuItem::with_id(
+        app,
+        "zoom-reset",
+        tr(&locale, "重置缩放", "Reset Zoom"),
+        true,
+        Some("CmdOrCtrl+0"),
+    )?;
     let sep3 = tauri::menu::PredefinedMenuItem::separator(app)?;
-    let fullscreen = tauri::menu::MenuItem::with_id(app, "toggle-fullscreen", "全屏", true, Some("F11"))?;
+    let fullscreen = tauri::menu::MenuItem::with_id(
+        app,
+        "toggle-fullscreen",
+        tr(&locale, "全屏", "Full Screen"),
+        true,
+        Some("F11"),
+    )?;
     view.append_items(&[
         &doc_source,
         &file_tree,
@@ -347,19 +473,89 @@ fn build_menu(app: &AppHandle) -> tauri::Result<()> {
     #[cfg(debug_assertions)]
     {
         let sep4 = tauri::menu::PredefinedMenuItem::separator(app)?;
-        let devtools = tauri::menu::MenuItem::with_id(app, "toggle-devtools", "开发者工具", true, Some("CmdOrCtrl+Alt+I"))?;
+        let devtools = tauri::menu::MenuItem::with_id(
+            app,
+            "toggle-devtools",
+            tr(&locale, "开发者工具", "Developer Tools"),
+            true,
+            Some("CmdOrCtrl+Alt+I"),
+        )?;
         view.append_items(&[&sep4, &devtools])?;
     }
 
-    let help = tauri::menu::Submenu::with_id(app, "m-help", "帮助", true)?;
+    let help = tauri::menu::Submenu::with_id(app, "m-help", tr(&locale, "帮助", "Help"), true)?;
     help.append_items(&[
-        &tauri::menu::MenuItem::with_id(app, "help-changelog", "更新日志", true, None::<&str>)?,
-        &tauri::menu::MenuItem::with_id(app, "about", "关于 MdReader", true, None::<&str>)?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "help-changelog",
+            tr(&locale, "更新日志", "Changelog"),
+            true,
+            None::<&str>,
+        )?,
+        &tauri::menu::MenuItem::with_id(
+            app,
+            "about",
+            tr(&locale, "关于 MdReader", "About MdReader"),
+            true,
+            None::<&str>,
+        )?,
     ])?;
 
     let menu = tauri::menu::Menu::with_items(app, &[&file, &edit, &insert, &fmt, &view, &help])?;
     app.set_menu(menu)?;
     Ok(())
+}
+
+fn build_tray_menu(app: &AppHandle, locale: &str) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    tauri::menu::Menu::with_items(
+        app,
+        &[
+            &tauri::menu::MenuItem::with_id(
+                app,
+                "tray-toggle",
+                tr(locale, "显示 / 隐藏窗口", "Show / Hide Window"),
+                true,
+                None::<&str>,
+            )?,
+            &tauri::menu::MenuItem::with_id(
+                app,
+                "tray-new",
+                tr(locale, "新建文件", "New File"),
+                true,
+                None::<&str>,
+            )?,
+            &tauri::menu::PredefinedMenuItem::separator(app)?,
+            &tauri::menu::MenuItem::with_id(
+                app,
+                "tray-quit",
+                tr(locale, "退出", "Quit"),
+                true,
+                None::<&str>,
+            )?,
+        ],
+    )
+}
+
+#[tauri::command]
+fn set_locale(app: AppHandle, state: State<AppState>, locale: String) -> Result<serde_json::Value, String> {
+    let next = if locale == "en-US" { "en-US" } else { "zh-CN" };
+    *state.locale.lock_ok() = next.to_string();
+    let (dirty, file_name) = {
+        let doc = state.doc.lock_ok();
+        (doc.dirty, doc.file_name.clone())
+    };
+    set_doc_title(&app, dirty, &file_name);
+    build_menu(&app).map_err(|e| e.to_string())?;
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let menu = build_tray_menu(&app, next).map_err(|e| e.to_string())?;
+        let _ = tray.set_menu(Some(menu));
+        let _ = tray.set_tooltip(Some(tr(
+            next,
+            "MdReader - Markdown 编辑器",
+            "MdReader - Markdown Editor",
+        )));
+    }
+    Ok(json!({ "locale": next }))
 }
 
 fn handle_menu_event(app: &AppHandle, id: &str) {
@@ -458,11 +654,12 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
 
 #[tauri::command]
 async fn open_file_dialog(app: AppHandle) -> Result<serde_json::Value, String> {
+    let locale = app.state::<AppState>().locale.lock_ok().clone();
     let picked = app
         .dialog()
         .file()
-        .add_filter("Markdown 文件", &MD_EXTS)
-        .add_filter("所有文件", &["*"])
+        .add_filter(tr(&locale, "Markdown 文件", "Markdown Files"), &MD_EXTS)
+        .add_filter(tr(&locale, "所有文件", "All Files"), &["*"])
         .blocking_pick_file();
     let Some(file) = picked else {
         return Ok(json!({ "canceled": true }));
@@ -545,12 +742,14 @@ fn save_file(app: AppHandle, path: String, content: String) -> Result<serde_json
 
 #[tauri::command]
 async fn save_file_as(app: AppHandle, content: String, name: Option<String>) -> Result<serde_json::Value, String> {
+    let locale = app.state::<AppState>().locale.lock_ok().clone();
+    let default_name = format!("{}.md", tr(&locale, "未命名", "Untitled"));
     let picked = app
         .dialog()
         .file()
-        .add_filter("Markdown 文件", &MD_EXTS)
-        .add_filter("所有文件", &["*"])
-        .set_file_name(name.as_deref().unwrap_or("未命名.md"))
+        .add_filter(tr(&locale, "Markdown 文件", "Markdown Files"), &MD_EXTS)
+        .add_filter(tr(&locale, "所有文件", "All Files"), &["*"])
+        .set_file_name(name.as_deref().unwrap_or(default_name.as_str()))
         .blocking_save_file();
     let Some(file) = picked else {
         return Ok(json!({ "canceled": true }));
@@ -670,6 +869,7 @@ fn open_external(app: AppHandle, url: String) -> Result<(), String> {
 
 #[tauri::command]
 fn open_local_link(app: AppHandle, href: String, doc_path: Option<String>) -> serde_json::Value {
+    let locale = app.state::<AppState>().locale.lock_ok().clone();
     let mut p = if let Some(rest) = href.strip_prefix("file://") {
         percent_decode(rest)
     } else {
@@ -677,12 +877,24 @@ fn open_local_link(app: AppHandle, href: String, doc_path: Option<String>) -> se
     };
     if !Path::new(&p).is_absolute() {
         let Some(base) = doc_path.as_deref().map(PathBuf::from).and_then(|b| b.parent().map(|d| d.to_path_buf())) else {
-            return json!({ "ok": false, "message": "当前文档尚未保存到磁盘，无法解析相对链接" });
+            return json!({
+                "ok": false,
+                "message": tr(
+                    &locale,
+                    "当前文档尚未保存到磁盘，无法解析相对链接",
+                    "Save the document to disk before resolving relative links"
+                )
+            });
         };
         p = base.join(&p).to_string_lossy().into_owned();
     }
     if !Path::new(&p).exists() {
-        return json!({ "ok": false, "message": format!("文件不存在：{p}") });
+        let msg = if locale == "en-US" {
+            format!("File not found: {p}")
+        } else {
+            format!("文件不存在：{p}")
+        };
+        return json!({ "ok": false, "message": msg });
     }
     if is_md_file(&p) {
         show_main(&app);
@@ -720,10 +932,11 @@ fn set_perf_config(app: AppHandle, state: State<AppState>, cfg: PerfConfig) -> P
 }
 
 #[tauri::command]
-fn import_asset(src: String, doc_path: String) -> serde_json::Value {
+fn import_asset(app: AppHandle, src: String, doc_path: String) -> serde_json::Value {
+    let locale = app.state::<AppState>().locale.lock_ok().clone();
     let doc = PathBuf::from(&doc_path);
     let Some(dir) = doc.parent().map(|d| d.to_path_buf()) else {
-        return json!({ "ok": false, "message": "请先保存文档" });
+        return json!({ "ok": false, "message": tr(&locale, "请先保存文档", "Save the document first") });
     };
     let assets = dir.join("assets");
     if let Err(e) = fs::create_dir_all(&assets) {
@@ -755,14 +968,16 @@ fn import_asset(src: String, doc_path: String) -> serde_json::Value {
 /// 保存二进制图片（编辑器内粘贴）到文档旁 assets/
 #[tauri::command]
 fn save_image_asset(
+    app: AppHandle,
     doc_path: String,
     data: String,
     ext: String,
 ) -> serde_json::Value {
     use base64::engine::general_purpose::STANDARD;
+    let locale = app.state::<AppState>().locale.lock_ok().clone();
     let doc = PathBuf::from(&doc_path);
     let Some(dir) = doc.parent().map(|d| d.to_path_buf()) else {
-        return json!({ "ok": false, "message": "请先保存文档" });
+        return json!({ "ok": false, "message": tr(&locale, "请先保存文档", "Save the document first") });
     };
     let assets = dir.join("assets");
     if let Err(e) = fs::create_dir_all(&assets) {
@@ -1028,6 +1243,7 @@ pub fn run() {
             watch_paths: Mutex::new(Vec::new()),
             exiting: Mutex::new(false),
             zoom: Mutex::new(1.0),
+            locale: Mutex::new("zh-CN".into()),
         })
         .invoke_handler(tauri::generate_handler![
             open_file_dialog,
@@ -1054,7 +1270,8 @@ pub fn run() {
             open_local_link,
             get_perf_config,
             set_perf_config,
-            get_metrics
+            get_metrics,
+            set_locale
         ])
         .on_page_load(|webview, _payload| {
             // 关键：必须 show 窗口本身（Webview::show 仅显示 webview 控件）
@@ -1079,18 +1296,15 @@ pub fn run() {
             build_menu(&handle)?;
 
             // 托盘
-            let tray_menu = tauri::menu::Menu::with_items(
-                &handle,
-                &[
-                    &tauri::menu::MenuItem::with_id(&handle, "tray-toggle", "显示 / 隐藏窗口", true, None::<&str>)?,
-                    &tauri::menu::MenuItem::with_id(&handle, "tray-new", "新建文件", true, None::<&str>)?,
-                    &tauri::menu::PredefinedMenuItem::separator(&handle)?,
-                    &tauri::menu::MenuItem::with_id(&handle, "tray-quit", "退出", true, None::<&str>)?,
-                ],
-            )?;
+            let locale = handle.state::<AppState>().locale.lock_ok().clone();
+            let tray_menu = build_tray_menu(&handle, &locale)?;
             let _tray = tauri::tray::TrayIconBuilder::with_id("main-tray")
                 .icon(tauri::include_image!("icons/tray.png"))
-                .tooltip("MdReader - Markdown 编辑器")
+                .tooltip(tr(
+                    &locale,
+                    "MdReader - Markdown 编辑器",
+                    "MdReader - Markdown Editor",
+                ))
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().0.as_str() {

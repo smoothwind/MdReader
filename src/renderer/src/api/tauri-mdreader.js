@@ -46,6 +46,7 @@ if (isTauri && !window.mdreader) {
 
   window.mdreader = {
     runtime: 'tauri',
+    setLocale: (locale) => invoke('set_locale', { locale }),
     openDialog: () => invoke('open_file_dialog'),
     readPath: (path, opts) => invoke('read_file_cmd', { path, skipRecent: !!opts?.skipRecent }),
     openExternal: (url) => invoke('open_external', { url }),

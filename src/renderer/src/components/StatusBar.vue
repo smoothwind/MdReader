@@ -1,15 +1,19 @@
 <script setup>
 import { computed } from 'vue'
 import { store, getActive } from '../store'
+import { t } from '../i18n'
 
-const pathText = computed(() => getActive()?.filePath || '尚未保存到文件')
+const pathText = computed(() => getActive()?.filePath || t('status.notSaved'))
 const savedText = computed(() => {
   const at = getActive()?.savedAt
-  return at ? '已保存 ' + new Date(at).toLocaleTimeString() : ''
+  return at ? t('status.savedAt', { time: new Date(at).toLocaleTimeString() }) : ''
 })
-const statText = computed(
-  () =>
-    store.stats.wordCount + ' 词 · ' + store.stats.characterCount + ' 字符 · ' + store.stats.lineCount + ' 行'
+const statText = computed(() =>
+  t('status.stats', {
+    words: store.stats.wordCount,
+    chars: store.stats.characterCount,
+    lines: store.stats.lineCount
+  })
 )
 const showPath = computed(() => store.tabs.length > 0)
 </script>
