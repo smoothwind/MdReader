@@ -1,4 +1,5 @@
 // 导出工具：dataUrl/blob → 字节、SVG → PNG、统一走 exportSave 对话框
+import { t } from '../i18n'
 
 export async function dataUrlToBytes(dataUrl) {
   const blob = await (await fetch(dataUrl)).blob()
@@ -37,10 +38,10 @@ export async function svgToPngBytes(svg, background, scale = 2) {
 export async function exportBytes(bytes, name, ext, extName, { notify, okMsg } = {}) {
   try {
     const r = await window.mdreader.exportSave({ data: bytes, name, ext, extName })
-    if (!r.canceled) notify?.(okMsg || '已导出')
+    if (!r.canceled) notify?.(okMsg || t('common.exportDone'))
     return !r.canceled
   } catch (err) {
-    notify?.('导出失败：' + (err?.message || err))
+    notify?.(t('common.exportFailed') + ': ' + (err?.message || err))
     return false
   }
 }

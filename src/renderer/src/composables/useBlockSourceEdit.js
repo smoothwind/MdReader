@@ -1,6 +1,8 @@
 // 段落/标题/表格 原地 Markdown 源码编辑：Lute VditorDOM2Md / Md2VditorDOM 精确双向转换。
 // 关键：textarea 容器所有冒泡事件 stopPropagation，隔离 Vditor 输入管线（AGENTS.md 规则 1）。
 
+import { t } from '../i18n'
+
 export function useBlockSourceEdit({ notify, syncDoc }) {
   const srcEditPrev = new WeakMap()
 
@@ -11,7 +13,7 @@ export function useBlockSourceEdit({ notify, syncDoc }) {
   function enterBlockSourceEdit(block, mdFallback) {
     if (!block || block.dataset.srcEdit === '1') return
     const lute = luteEngine()
-    if (!lute) return notify('转换引擎未就绪，请稍后重试')
+    if (!lute) return notify(t('editor.blockConvertNotReady'))
     let md
     try {
       md = (lute.VditorDOM2Md(block.outerHTML) || '').replace(/\n+$/, '')
@@ -19,7 +21,7 @@ export function useBlockSourceEdit({ notify, syncDoc }) {
       md = ''
     }
     if (!md.trim() && mdFallback) md = mdFallback.replace(/\n+$/, '')
-    if (!md.trim()) return notify('未获取到源码')
+    if (!md.trim()) return notify(t('editor.sourceUnavailable'))
     srcEditPrev.set(block, block.innerHTML)
     block.dataset.srcEdit = '1'
     block.setAttribute('contenteditable', 'false')
@@ -38,10 +40,10 @@ export function useBlockSourceEdit({ notify, syncDoc }) {
     const bar = document.createElement('div')
     bar.className = 'md-inline-src-bar'
     const cancel = document.createElement('button')
-    cancel.textContent = '取消 (Esc)'
+    cancel.textContent = t('editor.cancelShortcut')
     const ok = document.createElement('button')
     ok.className = 'primary'
-    ok.textContent = '应用 (Ctrl+Enter)'
+    ok.textContent = t('editor.applyShortcut')
     bar.append(cancel, ok)
     wrap.append(ta, bar)
     block.innerHTML = ''
@@ -96,7 +98,7 @@ export function useBlockSourceEdit({ notify, syncDoc }) {
           block.innerHTML = ''
         }
       } catch {
-        notify('Markdown 解析失败，已保留原文')
+        notify(t('editor.markdownParseFailed'))
         if (prevHtml != null) block.innerHTML = prevHtml
       }
     } else if (!apply && prevHtml != null) {

@@ -1,12 +1,13 @@
 <script setup>
-import { onBeforeUnmount, onMounted, nextTick, reactive, ref, watch } from 'vue'
-import { store, getActive, createTab, welcomeDoc } from './store'
+import { computed, onBeforeUnmount, onMounted, nextTick, reactive, ref, watch } from 'vue'
+import { store, getActive, createTab, getWelcomeDoc } from './store'
 import { setupTheme } from './composables/useTheme'
 import TabBar from './components/TabBar.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
 import { UxButton, UxContextMenuHost } from '@ux/components'
 import { TourGuide } from '@ux/patterns'
-import { TOUR_STEPS } from './tour'
+import { getTourSteps } from './tour'
+import { locale, setLocale, t } from './i18n'
 import StatusBar from './components/StatusBar.vue'
 import EditorPane from './components/EditorPane.vue'
 import TocPanel from './components/TocPanel.vue'
@@ -24,8 +25,9 @@ restoreSession()
 
 const AUTOSAVE_INTERVAL_MS = 30_000
 const SESSION_INTERVAL_MS = 5_000
-const UNNAMED = '未命名'
+const UNNAMED = computed(() => t('common.untitled'))
 const LEGACY_SESSION_KEY = 'mdreader:session'
+const tourSteps = computed(() => getTourSteps())
 
 /** 恢复会话：优先 IndexedDB（无配额上限），兼容读取旧 localStorage 快照并迁移 */
 async function restoreSession() {
@@ -44,10 +46,10 @@ async function restoreSession() {
     }
   }
   if (!data || (!data.tabs?.length && typeof data.activeIndex !== 'number')) return
-  for (const t of data.tabs || []) {
-    const tab = createTab(t.filePath || null, t.fileName || '', t.content || '')
-    tab.scrollTop = t.scrollTop || 0
-    tab.dirty = !!t.dirty
+  for (const saved of data.tabs || []) {
+    const tab = createTab(saved.filePath || null, saved.fileName || '', saved.content || '')
+    tab.scrollTop = saved.scrollTop || 0
+    tab.dirty = !!saved.dirty
   }
   const idx = data.activeIndex
   if (Number.isInteger(idx) && store.tabs[idx]) store.activeId = store.tabs[idx].id
@@ -92,10 +94,10 @@ function cancelValue() {
 }
 
 function confirmClose(message) {
-  return confirmDialog('关闭标签', message, [
-    { label: '取消', value: 2, cancel: true },
-    { label: '不保存', value: 1 },
-    { label: '保存', value: 0, primary: true }
+  return confirmDialog(t('app.closeTabTitle'), message, [
+    { label: t('common.cancel'), value: 2, cancel: true },
+    { label: t('app.dontSave'), value: 1 },
+    { label: t('common.save'), value: 0, primary: true }
   ])
 }
 
@@ -173,7 +175,7 @@ async function openFile() {
   try {
     r = await window.mdreader.openDialog()
   } catch (err) {
-    notify('打开文件失败：' + (err?.message || err))
+    notify(t('app.openFailed', { error: err?.message || err }))
     return
   }
   if (!r.canceled) openTabFromFile(r)
@@ -184,7 +186,7 @@ async function readPath(p) {
     openTabFromFile(await window.mdreader.readPath(p))
   } catch (err) {
     console.error('读取文件失败:', p, err)
-    notify('打开文件失败：' + (err?.message || err))
+    notify(t('app.openFailed', { error: err?.message || err }))
   }
 }
 
@@ -192,7 +194,7 @@ async function readPath(p) {
 async function saveTab(tab) {
   try {
     if (!tab.filePath) {
-      const r = await window.mdreader.saveAs(tab.content, tab.fileName || UNNAMED + '.md')
+      const r = await window.mdreader.saveAs(tab.content, tab.fileName || t('app.unnamedMd', { name: UNNAMED.value }))
       if (r.canceled) return false
       tab.filePath = r.path
       tab.fileName = r.name
@@ -204,7 +206,9 @@ async function saveTab(tab) {
     tab.dirty = false
     return true
   } catch (err) {
-    notify(`保存 “${tab.fileName || UNNAMED}” 失败：${err?.message || err}`)
+    notify(
+      t('app.saveFailed', { name: tab.fileName || UNNAMED.value, error: err?.message || err })
+    )
     return false
   }
 }
@@ -213,7 +217,9 @@ async function closeTab(id) {
   const tab = store.tabs.find((t) => t.id === id)
   if (!tab) return
   if (tab.dirty) {
-    const response = await confirmClose(`是否保存对 “${tab.fileName || UNNAMED}” 的更改？`)
+    const response = await confirmClose(
+      t('app.closeTabMessage', { name: tab.fileName || UNNAMED.value })
+    )
     if (response === 2) return
     if (response === 0) {
       if (!(await saveTab(tab))) return
@@ -260,14 +266,14 @@ async function saveFileAs() {
   if (!tab) return
   if (!tab.filePath) return saveTab(tab)
   try {
-    const r = await window.mdreader.saveAs(tab.content, tab.fileName || UNNAMED + '.md')
+    const r = await window.mdreader.saveAs(tab.content, tab.fileName || t('app.unnamedMd', { name: UNNAMED.value }))
     if (r.canceled) return
     tab.filePath = r.path
     tab.fileName = r.name
     tab.dirty = false
     tab.savedAt = r.savedAt
   } catch (err) {
-    notify('另存为失败：' + (err?.message || err))
+    notify(t('app.saveAsFailed', { error: err?.message || err }))
   }
 }
 
@@ -287,7 +293,7 @@ function escapeHtmlText(s) {
 function docHtmlBody() {
   const tab = getActive()
   const body = editorRef.value?.getHtml() || ''
-  const title = tab?.fileName || UNNAMED
+  const title = tab?.fileName || UNNAMED.value
   return { tab, body, title }
 }
 
@@ -308,7 +314,13 @@ async function exportHtml() {
     '</body>',
     '</html>'
   ].join('\n')
-  await exportBytes(new TextEncoder().encode(html), stripMdExt(title) + '.html', 'html', 'HTML 页面', '已导出 HTML')
+  await exportBytes(
+    new TextEncoder().encode(html),
+    stripMdExt(title) + '.html',
+    'html',
+    t('app.exportHtmlExt'),
+    t('app.exportHtmlDone')
+  )
 }
 
 /** 导出 Word：HTML 包装为 Word 可直接打开的 .doc（MHTML 兼容头） */
@@ -329,7 +341,13 @@ async function exportWord() {
     '</body>',
     '</html>'
   ].join('\n')
-  await exportBytes(new TextEncoder().encode(html), stripMdExt(title) + '.doc', 'doc', 'Word 文档', '已导出 Word 文档')
+  await exportBytes(
+    new TextEncoder().encode(html),
+    stripMdExt(title) + '.doc',
+    'doc',
+    t('app.exportWordExt'),
+    t('app.exportWordDone')
+  )
 }
 
 // ---------- 导出长图（A4 版式分页，可选全部 / 页码范围） ----------
@@ -345,7 +363,7 @@ let exportImgTitle = ''
 
 async function openExportImageDialog() {
   const { title, body } = docHtmlBody()
-  if (!body) return notify('文档为空')
+  if (!body) return notify(t('app.emptyDoc'))
   closeExportImageDialog()
   exportImgTitle = stripMdExt(title)
   exportImgRoot = mountPrintRoot(body)
@@ -354,7 +372,7 @@ async function openExportImageDialog() {
     exportImgPages.value = totalPagesFor(exportImgRoot.root.scrollHeight)
   } catch {
     closeExportImageDialog()
-    return notify('导出失败：内容渲染超限')
+    return notify(t('app.exportRenderLimit'))
   }
   exportImgStart.value = 1
   exportImgEnd.value = exportImgPages.value
@@ -373,12 +391,12 @@ watch(exportImgOpen, (v) => {
 })
 
 async function confirmExportImage() {
-  if (!exportImgRoot) return notify('导出内容已失效，请重试')
+  if (!exportImgRoot) return notify(t('app.exportStale'))
   const all = exportImgMode.value === 'all'
   const start = all ? 1 : Number(exportImgStart.value)
   const end = all ? exportImgPages.value : Number(exportImgEnd.value)
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > exportImgPages.value) {
-    return notify(`请输入 1–${exportImgPages.value} 的页码范围`)
+    return notify(t('app.pageRange', { max: exportImgPages.value }))
   }
   exportImgBusy.value = true
   try {
@@ -387,12 +405,18 @@ async function confirmExportImage() {
       data: r.bytes,
       name: exportImgTitle + (all ? '.png' : `-p${r.startPage}-${r.endPage}.png`),
       ext: 'png',
-      extName: 'PNG 图片'
+      extName: t('app.pngImage')
     })
-    if (!save.canceled) notify(all ? '已导出长图' : `已导出第 ${r.startPage}–${r.endPage} 页长图`)
+    if (!save.canceled) {
+      notify(
+        all
+          ? t('app.exportLongImageAll')
+          : t('app.exportLongImageRange', { start: r.startPage, end: r.endPage })
+      )
+    }
     closeExportImageDialog()
   } catch (err) {
-    notify('导出失败：文档过长或渲染超限')
+    notify(t('app.exportTooLong'))
   } finally {
     exportImgBusy.value = false
   }
@@ -413,7 +437,7 @@ function runPrintDialog() {
 
 async function withPrintRoot(fn) {
   const { body } = docHtmlBody()
-  if (!body) return notify('文档为空')
+  if (!body) return notify(t('app.emptyDoc'))
   const mounted = mountPrintRoot(body)
   try {
     await waitPrintReady(mounted.root)
@@ -429,13 +453,13 @@ async function exportPdf() {
     try {
       const r = await window.mdreader.exportPdf?.()
       if (r?.unsupported) {
-        notify('当前运行时不支持静默导出，已打开打印（可另存为 PDF）')
+        notify(t('app.unsupportedPdf'))
         await runPrintDialog()
         return
       }
-      if (!r.canceled) notify('已导出 PDF')
+      if (!r.canceled) notify(t('app.pdfDone'))
     } catch (err) {
-      notify('导出失败：' + (err?.message || err))
+      notify(t('common.exportFailed') + ': ' + (err?.message || err))
     }
   })
 }
@@ -449,7 +473,7 @@ async function exportBytes(data, name, ext, extName, okMsg) {
     const r = await window.mdreader.exportSave({ data, name, ext, extName })
     if (!r.canceled) notify(okMsg)
   } catch (err) {
-    notify('导出失败：' + (err?.message || err))
+    notify(t('common.exportFailed') + ': ' + (err?.message || err))
   }
 }
 
@@ -524,18 +548,18 @@ function autosaveEnabled() {
 
 async function autosaveTick() {
   if (!autosaveEnabled()) return
-  for (const t of [...store.tabs]) {
-    if (t.dirty && t.filePath) {
+  for (const tab of [...store.tabs]) {
+    if (tab.dirty && tab.filePath) {
       try {
-        const r = await window.mdreader.save(t.filePath, t.content)
-        t.dirty = false
-        t.savedAt = r.savedAt
-        t.autosaveFailed = false
+        const r = await window.mdreader.save(tab.filePath, tab.content)
+        tab.dirty = false
+        tab.savedAt = r.savedAt
+        tab.autosaveFailed = false
       } catch {
         /* 失败提示一次，避免每 30 秒刷屏；成功后复位 */
-        if (!t.autosaveFailed) {
-          t.autosaveFailed = true
-          notify(`自动保存 “${t.fileName || UNNAMED}” 失败，将在下个周期重试`)
+        if (!tab.autosaveFailed) {
+          tab.autosaveFailed = true
+          notify(t('app.autosaveFailed', { name: tab.fileName || UNNAMED.value }))
         }
       }
     }
@@ -546,7 +570,7 @@ async function importDroppedImage(src) {
   const tab = getActive()
   if (!tab) return
   if (!tab.filePath) {
-    editorRef.value?.notify('请先保存文档，再插入图片')
+    editorRef.value?.notify(t('app.saveBeforeImage'))
     return
   }
   let r
@@ -556,7 +580,7 @@ async function importDroppedImage(src) {
     r = { ok: false, message: err?.message || String(err) }
   }
   if (r?.ok) editorRef.value?.insertImage(r.relative)
-  else editorRef.value?.notify(r?.message || '图片导入失败')
+  else editorRef.value?.notify(r?.message || t('app.imageImportFailed'))
 }
 
 /** 编辑器内粘贴图片：保存到文档旁 assets/ 并插入相对引用 */
@@ -564,15 +588,15 @@ async function pasteImageBytes(data, ext) {
   const tab = getActive()
   if (!tab) return
   if (!tab.filePath) {
-    notify('请先保存文档，再粘贴图片')
+    notify(t('app.saveBeforePaste'))
     return
   }
   try {
     const r = await window.mdreader.saveImageAsset(tab.filePath, data, ext)
     if (r?.ok) editorRef.value?.insertImage(r.relative)
-    else notify(r?.message || '图片保存失败')
+    else notify(r?.message || t('app.imageSaveFailed'))
   } catch (err) {
-    notify('图片保存失败：' + (err?.message || err))
+    notify(t('app.imageSaveFailedDetail', { error: err?.message || err }))
   }
 }
 
@@ -589,15 +613,15 @@ async function onExternalFileChanged(p) {
   if (disk.content === tab.content) return
   if (!tab.dirty) {
     applyExternalContent(tab, disk.content)
-    notify(`“${tab.fileName}” 已被外部程序修改，已重新加载`)
+    notify(t('app.externalReloaded', { name: tab.fileName }))
     return
   }
   const v = await confirmDialog(
-    '文件已在外部修改',
-    `“${tab.fileName}” 在磁盘上已被其他程序修改，当前有未保存更改。是否用磁盘版本覆盖当前内容？`,
+    t('app.externalTitle'),
+    t('app.externalMessage', { name: tab.fileName }),
     [
-      { label: '忽略', value: 0, cancel: true },
-      { label: '重新加载', value: 1, primary: true }
+      { label: t('common.ignore'), value: 0, cancel: true },
+      { label: t('common.reload'), value: 1, primary: true }
     ]
   )
   if (v === 1) applyExternalContent(tab, disk.content)
@@ -631,6 +655,8 @@ function setupErrorLogging() {
 
 onMounted(() => {
   setupErrorLogging()
+  // 同步原生菜单/托盘语言（主进程启动时可能还不知道 localStorage 中的选择）
+  setLocale(locale.value, { persist: false })
   if (!localStorage.getItem('mdreader:tour-done')) {
     setTimeout(() => (tourOpen.value = true), 500)
   }
@@ -716,9 +742,14 @@ watch(
   () => store.activeId,
   () => {
     const tab = getActive()
-    editorRef.value?.setContent(tab ? tab.content : welcomeDoc, tab ? tab.scrollTop : 0)
+    editorRef.value?.setContent(tab ? tab.content : getWelcomeDoc(), tab ? tab.scrollTop : 0)
   }
 )
+
+// 无打开文档时，欢迎页内容随语言切换刷新
+watch(locale, () => {
+  if (!getActive()) editorRef.value?.setContent(getWelcomeDoc(), 0)
+})
 </script>
 
 <template>
@@ -752,8 +783,8 @@ watch(
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
     <TourGuide
       v-if="tourOpen"
-      :steps="TOUR_STEPS"
-      label="MdReader 使用引导"
+      :steps="tourSteps"
+      :label="t('app.tourLabel')"
       @done="finishTour"
     />
     <div
@@ -769,7 +800,7 @@ watch(
       @keydown="onConfirmKeydown"
     >
       <div class="md-source-box confirm-box">
-        <div class="md-source-head"><span>{{ confirmBox.title || '确认' }}</span></div>
+        <div class="md-source-head"><span>{{ confirmBox.title || t('common.confirm') }}</span></div>
         <div class="confirm-msg">{{ confirmBox.message }}</div>
         <div class="md-source-foot">
           <UxButton
@@ -792,10 +823,12 @@ watch(
       aria-live="polite"
     >
       <span class="update-banner-text">
-        发现新版本 <b>{{ updateLatest.tag }}</b>（当前 {{ appVersion }}）
+        {{ t('app.updateAvailable', { tag: updateLatest.tag, current: appVersion }) }}
       </span>
-      <button class="update-banner-go" title="打开 GitHub 下载页" @click="openReleasePage">去下载</button>
-      <button class="update-banner-x" title="本次会话不再提示" @click="dismissUpdate">✕</button>
+      <button class="update-banner-go" :title="t('app.goDownload')" @click="openReleasePage">
+        {{ t('app.goDownload') }}
+      </button>
+      <button class="update-banner-x" :title="t('app.dismissUpdate')" @click="dismissUpdate">✕</button>
     </div>
     <div
       v-if="aboutOpen"
@@ -805,33 +838,35 @@ watch(
       tabindex="-1"
       role="dialog"
       aria-modal="true"
-      aria-label="关于 MdReader"
+      :aria-label="t('app.aboutTitle')"
       @mousedown.self="aboutOpen = false"
       @keydown.esc="aboutOpen = false"
     >
       <div class="md-source-box about-box">
-        <div class="md-source-head"><span>关于 MdReader</span></div>
+        <div class="md-source-head"><span>{{ t('app.aboutTitle') }}</span></div>
         <div class="confirm-msg">
           <div class="about-brand">MdReader</div>
-          <p class="about-line">所见即所得的 Markdown 桌面编辑器。</p>
-          <p class="about-line">支持实时渲染、Mermaid 图表、脑图画布、主题切换与全类型源码视图。</p>
-          <p class="about-line">基于 Vue 3 + Vditor，提供 Electron 与 Tauri 2 两种运行方案。</p>
-          <p class="about-line about-version">当前版本 {{ appVersion }}</p>
+          <p class="about-line">{{ t('app.aboutDesc1') }}</p>
+          <p class="about-line">{{ t('app.aboutDesc2') }}</p>
+          <p class="about-line">{{ t('app.aboutDesc3') }}</p>
+          <p class="about-line about-version">{{ t('app.currentVersion', { version: appVersion }) }}</p>
           <div class="about-update">
             <button class="update-banner-go" :disabled="updateChecking" @click="checkUpdate()">
-              {{ updateChecking ? '检查中…' : '检查更新' }}
+              {{ updateChecking ? t('app.checking') : t('app.checkUpdate') }}
             </button>
             <button v-if="updateLatest" class="update-banner-go" @click="openReleasePage">
-              去下载 {{ updateLatest.tag }}
+              {{ t('app.goDownloadTag', { tag: updateLatest.tag }) }}
             </button>
-            <span v-if="updateLatest" class="about-note">发现新版本 {{ updateLatest.tag }}</span>
-            <span v-else-if="updateUpToDate" class="about-note">已是最新版本</span>
-            <span v-else-if="updateLastError" class="about-note about-note-err">检查失败，请确认网络可访问 GitHub</span>
+            <span v-if="updateLatest" class="about-note">
+              {{ t('app.updateAvailable', { tag: updateLatest.tag, current: appVersion }) }}
+            </span>
+            <span v-else-if="updateUpToDate" class="about-note">{{ t('app.upToDate') }}</span>
+            <span v-else-if="updateLastError" class="about-note about-note-err">{{ t('app.checkFailed') }}</span>
           </div>
         </div>
         <div class="md-source-foot">
-          <UxButton size="sm" variant="secondary" @click="openChangelog">查看更新日志</UxButton>
-          <UxButton size="sm" variant="primary" @click="aboutOpen = false">关闭</UxButton>
+          <UxButton size="sm" variant="secondary" @click="openChangelog">{{ t('app.viewChangelog') }}</UxButton>
+          <UxButton size="sm" variant="primary" @click="aboutOpen = false">{{ t('common.close') }}</UxButton>
         </div>
       </div>
     </div>
@@ -843,21 +878,21 @@ watch(
       tabindex="-1"
       role="dialog"
       aria-modal="true"
-      aria-label="导出长图"
+      :aria-label="t('app.exportImageTitle')"
       @mousedown.self="closeExportImageDialog"
       @keydown.esc="closeExportImageDialog"
     >
       <div class="md-source-box export-img-box">
-        <div class="md-source-head"><span>导出长图</span></div>
+        <div class="md-source-head"><span>{{ t('app.exportImageTitle') }}</span></div>
         <div class="confirm-msg">
-          <p class="export-img-note">A4 版式，共 {{ exportImgPages }} 页（与导出 PDF 页码一致）</p>
+          <p class="export-img-note">{{ t('app.exportImageNote', { pages: exportImgPages }) }}</p>
           <label class="export-img-row">
             <input v-model="exportImgMode" type="radio" value="all" />
-            <span>全部页面（1–{{ exportImgPages }}）</span>
+            <span>{{ t('app.exportAllPages', { pages: exportImgPages }) }}</span>
           </label>
           <label class="export-img-row">
             <input v-model="exportImgMode" type="radio" value="range" />
-            <span>指定范围</span>
+            <span>{{ t('app.exportRange') }}</span>
             <input
               v-model.number="exportImgStart"
               class="export-img-num"
@@ -866,7 +901,7 @@ watch(
               :max="exportImgPages"
               :disabled="exportImgMode !== 'range'"
             />
-            <span>至</span>
+            <span>{{ t('app.to') }}</span>
             <input
               v-model.number="exportImgEnd"
               class="export-img-num"
@@ -875,14 +910,14 @@ watch(
               :max="exportImgPages"
               :disabled="exportImgMode !== 'range'"
             />
-            <span>页</span>
+            <span>{{ t('app.pages') }}</span>
           </label>
-          <p class="export-img-note">所选范围将合成一张连续长图</p>
+          <p class="export-img-note">{{ t('app.exportRangeNote') }}</p>
         </div>
         <div class="md-source-foot">
-          <UxButton size="sm" variant="secondary" @click="closeExportImageDialog">取消</UxButton>
+          <UxButton size="sm" variant="secondary" @click="closeExportImageDialog">{{ t('common.cancel') }}</UxButton>
           <UxButton size="sm" variant="primary" :disabled="exportImgBusy" @click="confirmExportImage">
-            {{ exportImgBusy ? '导出中…' : '导出' }}
+            {{ exportImgBusy ? t('common.exporting') : t('common.export') }}
           </UxButton>
         </div>
       </div>

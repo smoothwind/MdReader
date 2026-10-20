@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { welcomeDoc } from './welcome'
+import { getWelcomeDoc } from './welcome'
 
 let seq = 0
 
@@ -37,4 +37,4 @@ export function createTab(filePath, fileName, content) {
   return tab
 }
 
-export { welcomeDoc }
+export { getWelcomeDoc }

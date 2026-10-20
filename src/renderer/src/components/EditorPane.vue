@@ -8,7 +8,8 @@ import {
   ExternalLink, Link2, RotateCcw
 } from 'lucide-vue-next'
 import 'vditor/dist/index.css'
-import { store, getActive, welcomeDoc } from '../store'
+import { store, getActive, getWelcomeDoc } from '../store'
+import { locale, t } from '../i18n'
 import SearchPanel from './SearchPanel.vue'
 import { UxButton, openContextMenuAt } from '@ux/components'
 import SelectionBar from './SelectionBar.vue'
@@ -144,7 +145,7 @@ function themeBg() {
 }
 
 function baseName() {
-  return stripMdExt(getActive()?.fileName || '未命名')
+  return stripMdExt(getActive()?.fileName || t('common.untitled'))
 }
 
 function notify(msg) {
@@ -334,23 +335,23 @@ function onBlockInput() {
 }
 
 async function applyCodeFormat(mode) {
-  if (bar.language !== 'sql' && bar.language !== 'json') return notify('格式化仅支持 SQL / JSON')
+  if (bar.language !== 'sql' && bar.language !== 'json') return notify(t('editor.formatOnlySqlJson'))
   const block = resolveCodeBlock()
   const source = recoverCodeSource(block, bar.language)
-  if (!source) return notify('未找到代码内容')
+  if (!source) return notify(t('editor.codeNotFound'))
   const formatted = await formatCode(bar.language, source, mode)
-  if (formatted === null) return notify(bar.language.toUpperCase() + ' 解析失败')
-  if (formatted === source) return notify('内容已是目标格式')
+  if (formatted === null) return notify(t('editor.parseFailed', { lang: bar.language.toUpperCase() }))
+  if (formatted === source) return notify(t('editor.alreadyFormatted'))
   const md = vditor.getValue()
   const updated = replaceCodeBlockInMd(md, bar.language, bar.index, formatted)
-  if (updated === md) return notify('未找到代码块')
+  if (updated === md) return notify(t('editor.codeBlockNotFound'))
   vditor.setValue(updated)
   const tab = getActive()
   if (tab) {
     tab.content = updated
     tab.dirty = true
   }
-  notify(mode === 'pretty' ? '已美化' : '已压缩')
+  notify(mode === 'pretty' ? t('editor.prettyDone') : t('editor.minifyDone'))
 }
 
 function scheduleHide() {
@@ -442,7 +443,7 @@ function showLinkBar(a) {
 
 async function copyLinkMd() {
   if (!bar.md) return
-  notify((await copyText(bar.md)) ? 'Markdown 已复制' : '复制失败')
+  notify((await copyText(bar.md)) ? t('editor.mdCopied') : t('common.copyFailed'))
 }
 
 function enterLinkEditFromBar() {
@@ -467,7 +468,7 @@ function selectUrlText(e) {
 
 async function copyLinkUrl() {
   if (!bar.url) return
-  notify((await copyText(bar.url)) ? '链接地址已复制' : '复制失败')
+  notify((await copyText(bar.url)) ? t('editor.urlCopied') : t('common.copyFailed'))
 }
 
 function onOver(e) {
@@ -551,15 +552,15 @@ async function copySource() {
   else if (bar.type === 'code')
     text = recoverCodeSource(resolveCodeBlock(), bar.language) || codeBlockText(resolveCodeBlock())
   else text = tableToMarkdown(resolveTable())
-  if (!text) return notify('未找到可复制的内容')
-  notify((await copyText(text)) ? '源码已复制' : '复制失败')
+  if (!text) return notify(t('editor.noCopyContent'))
+  notify((await copyText(text)) ? t('editor.sourceCopied') : t('common.copyFailed'))
 }
 
 async function editMarkmap() {
   const panel = resolveMermaidPanel()
   const block = panel?.closest('[data-type="code-block"]') || null
   const source = recoverCodeSource(block, 'markmap')
-  if (source === null) return notify('未找到脑图内容')
+  if (source === null) return notify(t('editor.mindmapNotFound'))
   mmEditorVisible.value = true
   await nextTick()
   const result = await mmEditorRef.value?.open(source)
@@ -571,14 +572,14 @@ async function editMarkmap() {
     : []
   const idx = block ? blocks.indexOf(block) : -1
   const updated = replaceCodeBlockInMd(md, 'markmap', idx, result)
-  if (updated === md) return notify('未找到代码块')
+  if (updated === md) return notify(t('editor.codeBlockNotFound'))
   vditor.setValue(updated)
   const tab = getActive()
   if (tab) {
     tab.content = updated
     tab.dirty = true
   }
-  notify('脑图已更新')
+  notify(t('editor.mindmapUpdated'))
 }
 
 function pickStyle(name) {
@@ -590,14 +591,14 @@ function pickStyle(name) {
 
 async function openLocalLink(href) {
   const r = await window.mdreader.openLocalLink(href, getActive()?.filePath || null)
-  if (!r?.ok) notify(r?.message || '无法打开链接')
+  if (!r?.ok) notify(r?.message || t('editor.cannotOpenLink'))
 }
 
 async function followLink(href) {
   if (href.startsWith('#')) {
     const el = tocApi.anchorTarget(safeDecode(href.slice(1)))
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    else notify('未找到锚点：' + href.slice(1))
+    else notify(t('editor.anchorNotFound', { href: href.slice(1) }))
     return
   }
   const m = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(href)
@@ -742,8 +743,8 @@ function ctxExec(cmd) {
   if (cmd === 'paste') {
     navigator.clipboard
       ?.readText()
-      .then((t) => t && document.execCommand('insertText', false, t))
-      .catch(() => notify('粘贴失败：无法读取剪贴板'))
+      .then((text) => text && document.execCommand('insertText', false, text))
+      .catch(() => notify(t('editor.pasteFailed')))
   } else {
     document.execCommand(cmd)
   }
@@ -755,11 +756,11 @@ function onEditorContextMenu(e) {
   const sel = window.getSelection()
   const hasSel = !!(sel && !sel.isCollapsed)
   openContextMenuAt(e.clientX, e.clientY, [
-    { id: 'cut', label: '剪切', disabled: !hasSel, run: () => ctxExec('cut') },
-    { id: 'copy', label: '复制', disabled: !hasSel, run: () => ctxExec('copy') },
-    { id: 'paste', label: '粘贴', run: () => ctxExec('paste') },
+    { id: 'cut', label: t('editor.ctxCut'), disabled: !hasSel, run: () => ctxExec('cut') },
+    { id: 'copy', label: t('editor.ctxCopy'), disabled: !hasSel, run: () => ctxExec('copy') },
+    { id: 'paste', label: t('editor.ctxPaste'), run: () => ctxExec('paste') },
     { type: 'separator' },
-    { id: 'selectAll', label: '全选', run: () => ctxExec('selectAll') }
+    { id: 'selectAll', label: t('editor.ctxSelectAll'), run: () => ctxExec('selectAll') }
   ])
 }
 
@@ -767,13 +768,13 @@ onMounted(() => {
   vditor = new Vditor(host.value, {
     mode: 'wysiwyg',
     cdn: publicPath('./vditor'),
-    lang: 'zh_CN',
+    lang: locale.value === 'zh-CN' ? 'zh_CN' : 'en_US',
     height: '100%',
-    value: getActive()?.content ?? welcomeDoc,
+    value: getActive()?.content ?? getWelcomeDoc(),
     cache: { enable: false },
     toolbar: [],
     undoDelay: 200,
-    placeholder: '开始书写 Markdown …',
+    placeholder: t('editor.placeholder'),
     preview: {
       delay: 100,
       theme: {
@@ -809,7 +810,7 @@ onMounted(() => {
         if (sc) sc.scrollTop = pendingScroll
         pendingScroll = 0
       }
-      refreshStats(getActive()?.content ?? welcomeDoc)
+      refreshStats(getActive()?.content ?? getWelcomeDoc())
     }
   })
 })
@@ -824,7 +825,7 @@ function setContent(value, scrollTop = 0) {
     refreshStats(value)
     if (value && value.length > BIG_DOC_CHARS && Date.now() - lastBigHintAt > BIG_DOC_HINT_COOLDOWN_MS) {
       lastBigHintAt = Date.now()
-      notify('文档较大，编辑可能卡顿，建议拆分或使用源码模式')
+      notify(t('editor.bigDocHint'))
     }
     nextTick(() => {
       const sc = getScroller()
@@ -839,7 +840,7 @@ function setContent(value, scrollTop = 0) {
 function insertImage(rel) {
   if (!ready || !vditor) return
   vditor.insertValue('\n![](' + encodeURI(rel) + ')\n')
-  notify('已插入图片引用')
+  notify(t('editor.imageInserted'))
 }
 
 // ---------- 编辑器内粘贴图片：保存到 assets/ 并插入相对引用 ----------
@@ -885,7 +886,7 @@ const srcLayer = reactive({ visible: false, title: '', text: '' })
 const srcLayerEl = ref(null)
 
 function openSourceLayer(title, text) {
-  if (!text) return notify('未获取到源码')
+  if (!text) return notify(t('editor.sourceUnavailable'))
   srcLayer.title = title
   srcLayer.text = text
   srcLayer.visible = true
@@ -893,7 +894,7 @@ function openSourceLayer(title, text) {
 }
 
 function toggleBlockSource(block) {
-  if (!block || !block.isConnected) return notify('元素已失效，请重新悬浮')
+  if (!block || !block.isConnected) return notify(t('editor.elementStale'))
   if (block.dataset.srcEdit === '1') blockSrcApi.finishBlockSourceEdit(block, true)
   else blockSrcApi.enterBlockSourceEdit(block)
 }
@@ -902,23 +903,23 @@ function toggleTableSource() {
   const table = resolveTable()
   if (!table) return
   if (table.dataset.srcEdit === '1') blockSrcApi.finishBlockSourceEdit(table, true)
-  else blockSrcApi.blockSrcApi.enterBlockSourceEdit(table, tableToMarkdown(table))
+  else blockSrcApi.enterBlockSourceEdit(table, tableToMarkdown(table))
 }
 
 function showDocSource() {
   if (!ready || !vditor) return
-  openSourceLayer('全文 Markdown 源码（只读）', vditor.getValue())
+  openSourceLayer(t('editor.docSourceTitle'), vditor.getValue())
 }
 
 async function showChangelog() {
   // 按需加载：更新日志不应进入主包（首屏体积）
   // @ts-ignore
   const { default: changelogMd } = await import('../../../../CHANGELOG.md?raw')
-  openSourceLayer('更新日志', (changelogMd || '').trim())
+  openSourceLayer(t('editor.changelogTitle'), (changelogMd || '').trim())
 }
 
 async function copyLayerSource() {
-  notify((await copyText(srcLayer.text)) ? '源码已复制' : '复制失败')
+  notify((await copyText(srcLayer.text)) ? t('editor.sourceCopied') : t('common.copyFailed'))
 }
 
 function syncDocAfterDomEdit() {
@@ -939,7 +940,7 @@ function applyBarLang(v) {
   else if (bar.type === 'mermaid' || bar.type === 'markmap') {
     block = resolveMermaidPanel()?.closest('[data-type="code-block"]') || resolveMermaidPanel()?.parentElement
   }
-  if (!block) return notify('未找到代码块')
+  if (!block) return notify(t('editor.codeBlockNotFound'))
   const srcPre = sourcePreOf(block)
   ;[...block.querySelectorAll('pre > code')].forEach((c) => {
     if (c.closest('.vditor-wysiwyg__preview')) return
@@ -952,18 +953,31 @@ function applyBarLang(v) {
     panel.dataset.srcDirty = '1'
   }
   bar.language = lang
-  notify(lang ? '语言已设为 ' + lang : '已清除语言')
+  notify(lang ? t('editor.langSet', { lang }) : t('editor.langCleared'))
   if (!isSourceMode(block) && srcPre) exitAndRender(block)
 }
 
 watch(
   () => props.theme,
-  (t) => {
+  (theme) => {
     if (!ready || !vditor) return
-    vditor.setTheme(t, t, codeStyle(t))
-    rerenderMermaid(t)
+    vditor.setTheme(theme, theme, codeStyle(theme))
+    rerenderMermaid(theme)
   }
 )
+
+watch(locale, () => {
+  // Vditor 在初始化时读取占位文案；切换语言后同步更新内部配置与已渲染的占位节点
+  const placeholder = t('editor.placeholder')
+  try {
+    if (vditor?.vditor?.options) vditor.vditor.options.placeholder = placeholder
+  } catch {
+    /* ignore */
+  }
+  host.value
+    ?.querySelectorAll('.vditor-wysiwyg pre.vditor-reset, .vditor-sv')
+    .forEach((el) => el.setAttribute('placeholder', placeholder))
+})
 
 watch(
   () => getActive()?.filePath,
@@ -973,7 +987,7 @@ watch(
 function insertMindmap() {
   if (!ready || !vditor) return
   const tab = getActive()
-  if (!tab) return notify('请先新建或打开文件')
+  if (!tab) return notify(t('editor.needFile'))
   const sel = window.getSelection()
   const anchor =
     sel && sel.rangeCount
@@ -982,16 +996,18 @@ function insertMindmap() {
         : sel.getRangeAt(0).startContainer
       : null
   if (anchor && anchor.closest('[data-type="code-block"]')) {
-    return notify('光标位于代码块内，无法插入')
+    return notify(t('editor.cursorInCode'))
   }
   // 走 Vditor 输入管线：光标处插入，保留撤销栈与滚动位置
-  vditor.insertValue('\n\n```markmap\n- 新脑图\n  - 分支一\n  - 分支二\n```\n')
+  vditor.insertValue(
+    `\n\n\`\`\`markmap\n- ${t('editor.mindmapRoot')}\n  - ${t('editor.mindmapBranch1')}\n  - ${t('editor.mindmapBranch2')}\n\`\`\`\n`
+  )
   nextTick(() => {
     const root = rootEl()
     const blocks = root ? [...root.querySelectorAll('[data-type="code-block"]')] : []
     if (blocks.length) enterSourceMode(blocks[blocks.length - 1])
   })
-  notify('已在光标处插入脑图（源码态），失焦后自动渲染')
+  notify(t('editor.mindmapInserted'))
 }
 
 onBeforeUnmount(() => {
@@ -1070,14 +1086,14 @@ defineExpose({
       <div class="md-source-box">
         <div class="md-source-head">
           <span>{{ srcLayer.title }}</span>
-          <UxButton size="sm" variant="ghost" label="关闭" @click="srcLayer.visible = false">
+          <UxButton size="sm" variant="ghost" :label="t('common.close')" @click="srcLayer.visible = false">
             <template #icon><X :size="14" /></template>
           </UxButton>
         </div>
         <pre class="md-source-pre">{{ srcLayer.text }}</pre>
         <div class="md-source-foot">
-          <UxButton size="sm" variant="secondary" @click="srcLayer.visible = false">关闭</UxButton>
-          <UxButton size="sm" variant="primary" @click="copyLayerSource">复制</UxButton>
+          <UxButton size="sm" variant="secondary" @click="srcLayer.visible = false">{{ t('common.close') }}</UxButton>
+          <UxButton size="sm" variant="primary" @click="copyLayerSource">{{ t('common.copy') }}</UxButton>
         </div>
       </div>
     </div>
@@ -1091,19 +1107,19 @@ defineExpose({
       @mouseleave="scheduleHide"
     >
       <template v-if="bar.type === 'table'">
-        <UxButton size="sm" variant="ghost" label="复制表格 Markdown 源码" @click="copySource">
+        <UxButton size="sm" variant="ghost" :label="t('editor.tableCopy')" @click="copySource">
           <template #icon><Copy :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="导出为图片" @click="exportTableImage">
+        <UxButton size="sm" variant="ghost" :label="t('editor.exportImage')" @click="exportTableImage">
           <template #icon><Image :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="导出为 Excel" @click="exportTableExcel">
+        <UxButton size="sm" variant="ghost" :label="t('editor.exportExcel')" @click="exportTableExcel">
           <template #icon><FileSpreadsheet :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="表格样式" @click="toggleStyleMenu">
+        <UxButton size="sm" variant="ghost" :label="t('editor.tableStyle')" @click="toggleStyleMenu">
           <template #icon><Paintbrush :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="编辑 Markdown 源码（双击表格同样生效）" @click="toggleTableSource">
+        <UxButton size="sm" variant="ghost" :label="t('editor.editTableMd')" @click="toggleTableSource">
           <template #icon><FileCode :size="13" /></template>
         </UxButton>
       </template>
@@ -1111,8 +1127,8 @@ defineExpose({
         <input
           class="md-lang-input"
           :value="bar.language"
-          placeholder="语言"
-          title="指定 / 修改代码块语言，回车应用"
+          :placeholder="t('editor.langPlaceholder')"
+          :title="t('editor.langTitle')"
           @mousedown.stop
           @click.stop
           @keydown.enter.prevent="applyBarLang($event.target.value)"
@@ -1121,7 +1137,7 @@ defineExpose({
           v-if="bar.language === 'sql' || bar.language === 'json'"
           size="sm"
           variant="ghost"
-          label="格式化（美化 + 缩进）"
+          :label="t('editor.formatPretty')"
           @click="applyCodeFormat('pretty')"
         >
           <template #icon><Sparkles :size="13" /></template>
@@ -1130,33 +1146,33 @@ defineExpose({
           v-if="bar.language === 'sql' || bar.language === 'json'"
           size="sm"
           variant="ghost"
-          label="压缩"
+          :label="t('editor.formatMinify')"
           @click="applyCodeFormat('minify')"
         >
           <template #icon><Minimize2 :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="复制源码" @click="copySource">
+        <UxButton size="sm" variant="ghost" :label="t('editor.copySource')" @click="copySource">
           <template #icon><Copy :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="导出为图片" @click="exportCodeImage">
+        <UxButton size="sm" variant="ghost" :label="t('editor.exportCodeImage')" @click="exportCodeImage">
           <template #icon><ImageDown :size="13" /></template>
         </UxButton>
       </template>
       <template v-else-if="bar.type === 'markmap'">
-        <UxButton size="sm" variant="ghost" label="复制脑图源码" @click="copySource">
+        <UxButton size="sm" variant="ghost" :label="t('editor.copyMindmapSource')" @click="copySource">
           <template #icon><Copy :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="打开脑图画布编辑" @click="editMarkmap">
+        <UxButton size="sm" variant="ghost" :label="t('editor.editMindmap')" @click="editMarkmap">
           <template #icon><Pencil :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="导出为 PNG" @click="exportMarkmapPng">
+        <UxButton size="sm" variant="ghost" :label="t('editor.exportPng')" @click="exportMarkmapPng">
           <template #icon><ImageDown :size="13" /></template>
         </UxButton>
         <span class="md-bar-sep"></span>
-        <UxButton size="sm" variant="ghost" label="缩小" @click="mmZoom(-1)">−</UxButton>
-        <span class="mm-ctl-pct" title="当前缩放比例">{{ mmCtl.pct }}%</span>
-        <UxButton size="sm" variant="ghost" label="放大" @click="mmZoom(1)">＋</UxButton>
-        <UxButton size="sm" variant="ghost" label="还原视图" @click="mmReset">
+        <UxButton size="sm" variant="ghost" :label="t('editor.zoomOut')" @click="mmZoom(-1)">−</UxButton>
+        <span class="mm-ctl-pct" :title="t('editor.zoomPct')">{{ mmCtl.pct }}%</span>
+        <UxButton size="sm" variant="ghost" :label="t('editor.zoomIn')" @click="mmZoom(1)">＋</UxButton>
+        <UxButton size="sm" variant="ghost" :label="t('editor.resetView')" @click="mmReset">
           <template #icon><RotateCcw :size="13" /></template>
         </UxButton>
       </template>
@@ -1165,39 +1181,39 @@ defineExpose({
           v-if="bar.anchorOk !== null"
           class="md-bar-anchor"
           :class="bar.anchorOk ? 'ok' : 'bad'"
-          :title="bar.anchorOk ? '锚点有效' : '锚点无效'"
+          :title="bar.anchorOk ? t('editor.anchorOk') : t('editor.anchorBad')"
         >
           <CircleCheck v-if="bar.anchorOk" :size="14" />
           <CircleX v-else :size="14" />
         </span>
         <span
           class="link-bar-url"
-          :title="`文本：${bar.text || bar.url}\n源码：${bar.md}`"
+          :title="t('editor.linkTitle', { text: bar.text || bar.url, md: bar.md })"
           @click="selectUrlText"
         >{{ bar.url }}</span>
-        <UxButton size="sm" variant="ghost" label="打开链接" @click="openLink">
+        <UxButton size="sm" variant="ghost" :label="t('editor.openLink')" @click="openLink">
           <template #icon><ExternalLink :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="复制链接地址" @click="copyLinkUrl">
+        <UxButton size="sm" variant="ghost" :label="t('editor.copyLink')" @click="copyLinkUrl">
           <template #icon><Link2 :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="编辑链接" @click="enterLinkEditFromBar">
+        <UxButton size="sm" variant="ghost" :label="t('editor.editLink')" @click="enterLinkEditFromBar">
           <template #icon><Pencil :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="复制 Markdown 源码" @click="copyLinkMd">
+        <UxButton size="sm" variant="ghost" :label="t('editor.copyLinkMd')" @click="copyLinkMd">
           <template #icon><FileCode :size="13" /></template>
         </UxButton>
       </template>
       <template v-else-if="bar.type === 'generic'">
-        <UxButton size="sm" variant="ghost" label="编辑 Markdown 源码（双击段落/标题同样生效）" @click="toggleBlockSource(bar.el)">
+        <UxButton size="sm" variant="ghost" :label="t('editor.editBlockMd')" @click="toggleBlockSource(bar.el)">
           <template #icon><FileCode :size="13" /></template>
         </UxButton>
       </template>
       <template v-else>
-        <UxButton size="sm" variant="ghost" label="复制图表源码" @click="copySource">
+        <UxButton size="sm" variant="ghost" :label="t('editor.copyDiagramSource')" @click="copySource">
           <template #icon><Copy :size="13" /></template>
         </UxButton>
-        <UxButton size="sm" variant="ghost" label="导出为 PNG" @click="exportMermaidPng">
+        <UxButton size="sm" variant="ghost" :label="t('editor.exportPng')" @click="exportMermaidPng">
           <template #icon><ImageDown :size="13" /></template>
         </UxButton>
       </template>
@@ -1217,7 +1233,7 @@ defineExpose({
         :class="{ active: s.name === activeStyle }"
         @click="pickStyle(s.name)"
       >
-        {{ s.label }}
+        {{ t(s.labelKey) }}
       </button>
     </div>
     <SearchPanel v-if="searchApi.search.open" :state="searchApi.search" :api="searchApi" />

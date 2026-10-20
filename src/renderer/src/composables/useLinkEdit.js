@@ -2,6 +2,8 @@
 // 关键：容器上所有冒泡事件 stopPropagation，防止输入事件进入 Vditor 管线
 // 导致 DOM 被序列化/重渲染（AGENTS.md 规则 1）。
 
+import { t } from '../i18n'
+
 const EDIT_EVENTS = [
   'input', 'beforeinput', 'compositionstart', 'compositionupdate', 'compositionend',
   'keydown', 'keyup', 'keypress', 'paste', 'copy', 'cut', 'contextmenu', 'dblclick',
@@ -31,21 +33,21 @@ export function useLinkEdit({ notify, syncDoc }) {
       stopEv(e)
       if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') preventEv(e)
     })
-    const t = document.createElement('input')
-    t.className = 'mle-input'
-    t.value = text
-    t.placeholder = '文本'
-    const u = document.createElement('input')
-    u.className = 'mle-input mle-url'
-    u.value = href
-    u.placeholder = '地址'
+    const textInput = document.createElement('input')
+    textInput.className = 'mle-input'
+    textInput.value = text
+    textInput.placeholder = t('editor.linkText')
+    const urlInput = document.createElement('input')
+    urlInput.className = 'mle-input mle-url'
+    urlInput.value = href
+    urlInput.placeholder = t('editor.linkUrl')
     const ok = document.createElement('button')
     ok.className = 'mle-btn primary'
-    ok.textContent = '应用'
+    ok.textContent = t('editor.apply')
     const cancel = document.createElement('button')
     cancel.className = 'mle-btn'
-    cancel.textContent = '取消'
-    wrap.append(t, u, ok, cancel)
+    cancel.textContent = t('common.cancel')
+    wrap.append(textInput, urlInput, ok, cancel)
     a.innerHTML = ''
     a.appendChild(wrap)
 
@@ -61,14 +63,14 @@ export function useLinkEdit({ notify, syncDoc }) {
         cancelFn()
       }
     }
-    ;[t, u].forEach((input) => {
+    ;[textInput, urlInput].forEach((input) => {
       input.addEventListener('keydown', onKey)
       input.addEventListener('click', (e) => e.stopPropagation())
     })
     ok.addEventListener('click', apply)
     cancel.addEventListener('click', cancelFn)
-    t.focus()
-    t.select()
+    textInput.focus()
+    textInput.select()
   }
 
   function finishLinkEdit(a, apply) {
@@ -81,10 +83,10 @@ export function useLinkEdit({ notify, syncDoc }) {
     const text = (inputs[0]?.value || '').trim()
     const url = (inputs[1]?.value || '').trim()
     if (apply) {
-      a.textContent = text || url || '链接'
+      a.textContent = text || url || t('editor.linkFallback')
       if (url) a.setAttribute('href', url)
       else a.removeAttribute('href')
-      notify('链接已更新')
+      notify(t('editor.linkUpdated'))
     } else if (prev) {
       a.replaceWith(prev)
     }

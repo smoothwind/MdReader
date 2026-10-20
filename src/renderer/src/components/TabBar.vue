@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { store } from '../store'
 import { UxButton } from '@ux/components'
 import { UxTabs } from '@ux/shell'
+import { t } from '../i18n'
 
 const emit = defineEmits([
   'select',
@@ -25,10 +26,10 @@ const noDoc = computed(() => store.tabs.length === 0)
 
 // store.tabs → UxTabs 数据模型（title / dirty）
 const tabs = computed(() =>
-  store.tabs.map((t) => ({
-    id: t.id,
-    title: t.fileName || '未命名',
-    dirty: !!t.dirty
+  store.tabs.map((tab) => ({
+    id: tab.id,
+    title: tab.fileName || t('common.untitled'),
+    dirty: !!tab.dirty
   }))
 )
 
@@ -47,15 +48,15 @@ function onReorder(fromId, toIndex) {
   <div class="tabbar">
     <div class="tabbar-tabs">
       <div v-if="noDoc" class="tabbar-empty">
-        <span>欢迎使用 MdReader — 也可直接拖入 .md 文件</span>
-        <UxButton size="sm" variant="secondary" @click="$emit('new')">新建文件</UxButton>
-        <UxButton size="sm" variant="primary" @click="$emit('open')">打开文件…</UxButton>
+        <span>{{ t('tabbar.welcome') }}</span>
+        <UxButton size="sm" variant="secondary" @click="$emit('new')">{{ t('tabbar.newFile') }}</UxButton>
+        <UxButton size="sm" variant="primary" @click="$emit('open')">{{ t('tabbar.openFile') }}</UxButton>
       </div>
       <UxTabs
         v-else
         :items="tabs"
         :active-id="store.activeId || ''"
-        label="文档标签"
+        :label="t('tabbar.tabsLabel')"
         @select="(id) => $emit('select', id)"
         @close="(id) => $emit('close', id)"
         @close-others="(id) => $emit('close-others', id)"
@@ -70,14 +71,14 @@ function onReorder(fromId, toIndex) {
         size="sm"
         :variant="store.showFileTree ? 'primary' : 'ghost'"
         icon="obj-folder-tree"
-        :label="store.showFileTree ? '收起文件树' : '文件树'"
+        :label="store.showFileTree ? t('tabbar.hideTree') : t('tabbar.fileTree')"
         @click="$emit('toggle-file-tree')"
       />
       <UxButton
         size="sm"
         variant="ghost"
         icon="act-help"
-        label="漫游引导"
+        :label="t('tabbar.tour')"
         data-tour="help"
         @click="$emit('open-tour')"
       />
@@ -85,7 +86,7 @@ function onReorder(fromId, toIndex) {
         size="sm"
         variant="ghost"
         icon="act-settings"
-        label="性能与监控"
+        :label="t('tabbar.settings')"
         data-tour="settings"
         @click="$emit('open-settings')"
       />
@@ -93,7 +94,7 @@ function onReorder(fromId, toIndex) {
         size="sm"
         variant="ghost"
         :icon="store.theme === 'dark' ? 'act-theme-light' : 'act-theme-dark'"
-        :label="store.theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
+        :label="store.theme === 'dark' ? t('tabbar.themeToLight') : t('tabbar.themeToDark')"
         data-tour="theme"
         @click="$emit('cycle-theme')"
       />
@@ -101,7 +102,7 @@ function onReorder(fromId, toIndex) {
         size="sm"
         variant="ghost"
         icon="act-mindmap"
-        label="插入脑图（Ctrl+M）"
+        :label="t('tabbar.insertMindmap')"
         data-tour="insert-mindmap"
         @click="$emit('insert-mindmap')"
       />
@@ -109,7 +110,7 @@ function onReorder(fromId, toIndex) {
         size="sm"
         variant="ghost"
         icon="act-open-file"
-        label="打开文件（Ctrl+O）"
+        :label="t('tabbar.openFileShortcut')"
         data-tour="doc-actions"
         @click="$emit('open')"
       />
@@ -117,14 +118,14 @@ function onReorder(fromId, toIndex) {
         size="sm"
         variant="ghost"
         icon="act-file-plus"
-        label="新建文件（Ctrl+N）"
+        :label="t('tabbar.newFileShortcut')"
         @click="$emit('new')"
       />
       <UxButton
         size="sm"
         variant="primary"
         icon="act-save"
-        label="保存当前文件（Ctrl+S）"
+        :label="t('tabbar.saveFile')"
         :disabled="noDoc"
         @click="$emit('save')"
       />

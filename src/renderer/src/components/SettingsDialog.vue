@@ -1,8 +1,9 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { defineAsyncComponent } from 'vue'
-import { Activity, FolderCog, RefreshCw, SlidersHorizontal, X } from 'lucide-vue-next'
+import { Activity, FolderCog, Languages, RefreshCw, SlidersHorizontal, X } from 'lucide-vue-next'
 import { store } from '../store'
+import { locale, setLocale, SUPPORTED_LOCALES, t } from '../i18n'
 
 // ECharts 体积较大，随弹窗按需加载
 const LineChart = defineAsyncComponent(() => import('./LineChart.vue'))
@@ -10,17 +11,22 @@ const LineChart = defineAsyncComponent(() => import('./LineChart.vue'))
 const emit = defineEmits(['close'])
 
 // ---------- 设置分类导航 ----------
-const SECTIONS = [
-  { key: 'editor', label: '编辑器', icon: SlidersHorizontal },
-  { key: 'docs', label: '文档与资源', icon: FolderCog },
-  { key: 'monitor', label: '性能监控', icon: Activity }
-]
-const activeSection = ref('editor')
+const SECTIONS = computed(() => [
+  { key: 'general', label: t('settings.sections.general'), icon: Languages },
+  { key: 'editor', label: t('settings.sections.editor'), icon: SlidersHorizontal },
+  { key: 'docs', label: t('settings.sections.docs'), icon: FolderCog },
+  { key: 'monitor', label: t('settings.sections.monitor'), icon: Activity }
+])
+const activeSection = ref('general')
+const language = computed({
+  get: () => locale.value,
+  set: (v) => setLocale(v)
+})
 const footNote = computed(() => {
   if (activeSection.value === 'docs')
-    return isElectron ? '资源配置保存于 userData/config.json' : '监控数据来自系统进程快照'
-  if (activeSection.value === 'monitor') return '监控数据来自系统进程快照'
-  return '本页改动即时生效，无需保存'
+    return isElectron ? t('settings.foot.docs') : t('settings.foot.webMonitor')
+  if (activeSection.value === 'monitor') return t('settings.foot.monitor')
+  return t('settings.foot.general')
 })
 
 const overlayEl = ref(null)
@@ -82,10 +88,10 @@ async function scanOrphans() {
     const r = await window.mdreader.checkAssets(tab.filePath, refs)
     assetOrphans.value = r?.orphans || []
     assetScanInfo.value = assetOrphans.value.length
-      ? `发现 ${assetOrphans.value.length} 个未引用文件`
-      : '没有未引用文件'
+      ? t('settings.foundOrphans', { count: assetOrphans.value.length })
+      : t('settings.noOrphans')
   } catch {
-    assetScanInfo.value = '检查失败'
+    assetScanInfo.value = t('settings.checkFailed')
   } finally {
     assetScanning.value = false
   }
@@ -105,10 +111,10 @@ async function deleteOrphans() {
   deleteArmed.value = false
   try {
     const r = await window.mdreader.deleteAssets(tab.filePath, assetOrphans.value)
-    assetScanInfo.value = `已删除 ${r?.deleted ?? 0} 个文件`
+    assetScanInfo.value = t('settings.deleted', { count: r?.deleted ?? 0 })
     assetOrphans.value = []
   } catch {
-    assetScanInfo.value = '删除失败'
+    assetScanInfo.value = t('settings.deleteFailed')
   }
 }
 
@@ -120,12 +126,12 @@ let timer = null
 
 // 监控图表系列色（ECharts 数据 + 图例点共用，非应用 chrome 样式），tokens 检查豁免
 /* tokens-exempt */
-const MEM_TYPES = [
-  { key: 'Browser', label: '主进程', color: '#2f9e44' },
-  { key: 'Renderer', label: '渲染进程', color: '#f08c00' },
-  { key: 'GPU', label: 'GPU 进程', color: '#9c36b5' },
-  { key: 'Utility', label: '工具进程', color: '#0c8599' }
-]
+const MEM_TYPES = computed(() => [
+  { key: 'Browser', label: t('settings.mainProc'), color: '#2f9e44' },
+  { key: 'Renderer', label: t('settings.rendererProc'), color: '#f08c00' },
+  { key: 'GPU', label: t('settings.gpuProc'), color: '#9c36b5' },
+  { key: 'Utility', label: t('settings.utilityProc'), color: '#0c8599' }
+])
 const CHART_COLORS = { total: '#4c8dff', cpu: '#e03131' }
 const HISTORY_MAX = 60
 
@@ -133,7 +139,9 @@ function fmtUptime(sec) {
   const h = Math.floor(sec / 3600)
   const m = Math.floor((sec % 3600) / 60)
   const s = sec % 60
-  return (h ? h + ' 时 ' : '') + m + ' 分 ' + s + ' 秒'
+  return h
+    ? t('settings.uptimeHms', { h, m, s })
+    : t('settings.uptimeMs', { m, s })
 }
 
 async function loadConfig() {
@@ -156,11 +164,11 @@ async function loadMetrics() {
 }
 
 const memSeries = computed(() => [
-  { label: '合计', color: CHART_COLORS.total, values: history.value.map((s) => s.total) },
-  ...MEM_TYPES.map((t) => ({
-    label: t.label,
-    color: t.color,
-    values: history.value.map((s) => s.types[t.key] || 0)
+  { label: t('settings.total'), color: CHART_COLORS.total, values: history.value.map((s) => s.total) },
+  ...MEM_TYPES.value.map((proc) => ({
+    label: proc.label,
+    color: proc.color,
+    values: history.value.map((s) => s.types[proc.key] || 0)
   }))
 ])
 const cpuSeries = computed(() => [
@@ -188,7 +196,7 @@ async function save(needRestart) {
     if (needRestart) window.mdreader.relaunchApp()
     else emit('close')
   } catch (err) {
-    saveErr.value = '保存失败：' + (err?.message || err)
+    saveErr.value = t('settings.saveFailed', { error: err?.message || err })
   } finally {
     saving.value = false
   }
@@ -231,19 +239,19 @@ onBeforeUnmount(() => {
     class="pf-overlay"
     role="dialog"
     aria-modal="true"
-    aria-label="设置"
+    :aria-label="t('settings.title')"
     tabindex="-1"
     @mousedown.self="emit('close')"
     @keydown.esc="emit('close')"
   >
     <div class="pf-window">
       <div class="pf-head">
-        <span class="pf-title">设置</span>
-        <button class="pf-close" title="关闭" @click="emit('close')"><X :size="15" /></button>
+        <span class="pf-title">{{ t('settings.title') }}</span>
+        <button class="pf-close" :title="t('settings.close')" @click="emit('close')"><X :size="15" /></button>
       </div>
 
       <div class="pf-layout">
-        <nav class="pf-nav" aria-label="设置分类">
+        <nav class="pf-nav" :aria-label="t('settings.navLabel')">
           <button
             v-for="sec in SECTIONS"
             :key="sec.key"
@@ -258,28 +266,42 @@ onBeforeUnmount(() => {
         </nav>
 
         <div class="pf-content">
+          <!-- 通用 -->
+          <template v-if="activeSection === 'general'">
+            <section class="pf-sec">
+              <div class="pf-sec-head">{{ t('settings.sections.general') }}</div>
+              <label class="pf-row pf-inline">
+                <span>{{ t('settings.language') }}</span>
+                <select v-model="language" class="pf-num">
+                  <option v-for="l in SUPPORTED_LOCALES" :key="l.value" :value="l.value">{{ l.label }}</option>
+                </select>
+                <span class="pf-desc">{{ t('settings.languageDesc') }}</span>
+              </label>
+            </section>
+          </template>
+
           <!-- 编辑器 -->
           <template v-if="activeSection === 'editor'">
             <section class="pf-sec">
-              <div class="pf-sec-head">编辑器</div>
+              <div class="pf-sec-head">{{ t('settings.sections.editor') }}</div>
               <label class="pf-row">
                 <input v-model="autosaveOn" type="checkbox" />
-                <span>自动保存<span class="pf-desc">每 30 秒，仅已保存到磁盘的文档</span></span>
+                <span>{{ t('settings.autosave') }}<span class="pf-desc">{{ t('settings.autosaveDesc') }}</span></span>
               </label>
               <div class="pf-row pf-inline">
-                <span>编辑区字号</span>
+                <span>{{ t('settings.fontSize') }}</span>
                 <select v-model.number="editorFontSize" class="pf-num">
                   <option :value="14">14px</option>
                   <option :value="15">15px</option>
-                  <option :value="16">16px（默认）</option>
+                  <option :value="16">16px{{ t('settings.default') }}</option>
                   <option :value="17">17px</option>
                   <option :value="18">18px</option>
                   <option :value="20">20px</option>
                 </select>
-                <span>行高</span>
+                <span>{{ t('settings.lineHeight') }}</span>
                 <select v-model.number="editorLineHeight" class="pf-num">
                   <option :value="1.6">1.6</option>
-                  <option :value="1.7">1.7（默认）</option>
+                  <option :value="1.7">1.7{{ t('settings.default') }}</option>
                   <option :value="1.8">1.8</option>
                   <option :value="2">2.0</option>
                 </select>
@@ -290,10 +312,10 @@ onBeforeUnmount(() => {
           <!-- 文档与资源 -->
           <template v-if="activeSection === 'docs'">
             <section class="pf-sec">
-              <div class="pf-sec-head">文档资产 <span class="pf-note">针对当前活动文档旁的 assets/ 目录</span></div>
+              <div class="pf-sec-head">{{ t('settings.docsAssets') }} <span class="pf-note">{{ t('settings.docsAssetsNote') }}</span></div>
               <div class="pf-row pf-inline">
                 <button class="pf-btn" :disabled="!activeTab?.filePath || assetScanning" @click="scanOrphans">
-                  {{ assetScanning ? '检查中…' : '检查未引用图片' }}
+                  {{ assetScanning ? t('settings.scanning') : t('settings.scanOrphans') }}
                 </button>
                 <button
                   v-if="assetOrphans.length"
@@ -301,25 +323,25 @@ onBeforeUnmount(() => {
                   :class="{ ghost: !deleteArmed }"
                   @click="deleteOrphans"
                 >
-                  {{ deleteArmed ? `确认删除 ${assetOrphans.length} 个文件` : '删除未引用文件' }}
+                  {{ deleteArmed ? t('settings.confirmDelete', { count: assetOrphans.length }) : t('settings.deleteOrphans') }}
                 </button>
                 <span v-if="assetScanInfo" class="pf-note">{{ assetScanInfo }}</span>
               </div>
             </section>
 
             <section v-if="isElectron" class="pf-sec">
-              <div class="pf-sec-head">资源配置 <span class="pf-note">修改后需重启应用生效</span></div>
+              <div class="pf-sec-head">{{ t('settings.resources') }} <span class="pf-note">{{ t('settings.restartNote') }}</span></div>
               <label v-if="cfg" class="pf-row">
                 <input v-model="cfg.disableHardwareAcceleration" type="checkbox" />
-                <span>禁用 GPU 硬件加速<span class="pf-desc">软渲染，可显著降低 GPU 进程内存占用</span></span>
+                <span>{{ t('settings.disableGpu') }}<span class="pf-desc">{{ t('settings.disableGpuDesc') }}</span></span>
               </label>
               <label v-if="cfg" class="pf-row">
                 <input v-model="cfg.inProcessGpu" type="checkbox" />
-                <span>合并 GPU 进程（in-process-gpu）<span class="pf-desc">减少一个独立进程的开销</span></span>
+                <span>{{ t('settings.inProcessGpu') }}<span class="pf-desc">{{ t('settings.inProcessGpuDesc') }}</span></span>
               </label>
               <label v-if="cfg" class="pf-row pf-inline">
                 <input v-model.number="cfg.maxOldSpaceSize" type="number" min="0" max="4096" step="32" class="pf-num" />
-                <span>渲染器堆上限（MB，0 = 不限制）<span class="pf-desc">限制 V8 堆，促使及时回收；过小会导致大文档崩溃</span></span>
+                <span>{{ t('settings.heapLimit') }}<span class="pf-desc">{{ t('settings.heapLimitDesc') }}</span></span>
               </label>
             </section>
           </template>
@@ -328,12 +350,12 @@ onBeforeUnmount(() => {
           <template v-if="activeSection === 'monitor'">
             <section class="pf-sec">
               <div class="pf-sec-head">
-                实时资源监控
-                <label class="pf-auto"><input v-model="autoRefresh" type="checkbox" />自动刷新（2 秒）</label>
-                <button class="pf-btn ghost" title="立即刷新" @click="loadMetrics"><RefreshCw :size="13" /></button>
+                {{ t('settings.monitorTitle') }}
+                <label class="pf-auto"><input v-model="autoRefresh" type="checkbox" />{{ t('settings.autoRefresh') }}</label>
+                <button class="pf-btn ghost" :title="t('settings.refreshNow')" @click="loadMetrics"><RefreshCw :size="13" /></button>
               </div>
               <div class="pf-chart-block">
-                <div class="pf-chart-title">资源占用（左轴：内存 MB ／ 右轴：CPU %）</div>
+                <div class="pf-chart-title">{{ t('settings.chartTitle') }}</div>
                 <LineChart
                   :series="memSeries"
                   :series-right="cpuSeries"
@@ -345,7 +367,7 @@ onBeforeUnmount(() => {
               </div>
               <div class="pf-legend">
                 <span class="pf-legend-item">
-                  <i class="pf-dot" :style="{ background: CHART_COLORS.total }"></i>合计
+                  <i class="pf-dot" :style="{ background: CHART_COLORS.total }"></i>{{ t('settings.total') }}
                   <b>{{ curTotal }} MB</b>
                 </span>
                 <span v-for="t2 in MEM_TYPES" :key="t2.key" class="pf-legend-item">
@@ -353,11 +375,11 @@ onBeforeUnmount(() => {
                   <b>{{ curMem(t2.key) }} MB</b>
                 </span>
                 <span class="pf-legend-item">
-                  <i class="pf-dot" :style="{ background: CHART_COLORS.cpu }"></i>CPU
+                  <i class="pf-dot" :style="{ background: CHART_COLORS.cpu }"></i>{{ t('settings.cpu') }}
                   <b>{{ curCpu }} %</b>
                 </span>
               </div>
-              <div class="pf-uptime" v-if="metrics">运行时长：{{ fmtUptime(metrics.uptime) }}</div>
+              <div class="pf-uptime" v-if="metrics">{{ t('settings.uptime', { time: fmtUptime(metrics.uptime) }) }}</div>
             </section>
           </template>
         </div>
@@ -368,11 +390,11 @@ onBeforeUnmount(() => {
         <span v-if="saveErr" class="pf-save-err">{{ saveErr }}</span>
         <span class="pf-spacer"></span>
         <template v-if="activeSection === 'docs' && isElectron">
-          <button class="pf-btn" :disabled="saving" @click="emit('close')">取消</button>
-          <button class="pf-btn" :disabled="saving" @click="save(false)">保存</button>
-          <button class="pf-btn primary" :disabled="saving" @click="save(true)">保存并重启</button>
+          <button class="pf-btn" :disabled="saving" @click="emit('close')">{{ t('common.cancel') }}</button>
+          <button class="pf-btn" :disabled="saving" @click="save(false)">{{ t('common.save') }}</button>
+          <button class="pf-btn primary" :disabled="saving" @click="save(true)">{{ t('settings.saveRestart') }}</button>
         </template>
-        <button v-else class="pf-btn" @click="emit('close')">关闭</button>
+        <button v-else class="pf-btn" @click="emit('close')">{{ t('settings.close') }}</button>
       </div>
     </div>
   </div>
