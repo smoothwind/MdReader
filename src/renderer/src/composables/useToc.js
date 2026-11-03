@@ -9,6 +9,19 @@ export function useToc({ getRootEl }) {
   let lastSignature = ''
   const headingEls = new Map()
 
+  /** 锚点/标题统一归一化：去零宽字符 + 小写 + 剔除全部非字母数字（Unicode 感知，保留中文） */
+  const normAnchor = (s) =>
+    String(s || '')
+      .replace(/\u200b/g, '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, '')
+
+  /** id 选择器转义：优先 CSS.escape，缺失时（测试环境/旧引擎）用最小兜底转义 */
+  const cssEscape = (s) => {
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(s)
+    return String(s).replace(/["\\#.\s]/g, '\\$1')
+  }
+
   function extractToc() {
     const root = getRootEl()
     if (!root) return
@@ -76,15 +89,24 @@ export function useToc({ getRootEl }) {
   function anchorTarget(name) {
     const root = getRootEl()
     if (!root || !name) return null
-    const byId =
-      root.querySelector('#' + CSS.escape(name)) ||
-      root.querySelector('#' + CSS.escape('user-content-' + name))
+    // id 精确匹配：个别选择器（全角标点等）在部分引擎/测试环境解析失败时，落到文本匹配
+    let byId = null
+    try {
+      byId =
+        root.querySelector('#' + cssEscape(name)) ||
+        root.querySelector('#' + cssEscape('user-content-' + name))
+    } catch {
+      byId = null
+    }
     if (byId) return byId
-    const want = name.toLowerCase().replace(/[-_\s]+/g, '')
+    // 锚点文本与标题文本必须用同一套归一化：去零宽字符 + 小写 + 剔除全部非字母数字。
+    // 标题里的标点/连字符/空白（如「标题：简介」「1.2 小节」「foo-bar」）与 Markdown
+    // 锚点写法允许的省略形式（#标题简介 / #12小节 / #foobar）由此一一对应，避免误报无效。
+    const want = normAnchor(name)
+    if (!want) return null
     for (const el of headingEls.values()) {
       if (!el.isConnected) continue
-      const t = (el.textContent || '').replace(/\u200b/g, '').toLowerCase().replace(/\s+/g, '')
-      if (t === want) return el
+      if (normAnchor(el.textContent) === want) return el
     }
     return null
   }
