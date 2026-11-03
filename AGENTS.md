@@ -71,6 +71,17 @@
 - 长图按 A4 内容页高 1003px 切页（与 PDF 页码一致），范围为所选页合成一张连续图
 - **html-to-image 无法捕获 `position:fixed` 的离屏元素**（克隆体保留负偏移，foreignObject 内为空白）：捕获前临时改为文档流定位，结束后还原
 
+### 11. 窗口摆放必须按显示器处理，禁止依赖创建期一次性 center
+
+- 双屏缩放（DPI）不一致时，固定逻辑尺寸 + `center` / OS 默认摆放会出现两类问题：
+  窗口超出扩展屏 workArea（右缘/底部被裁）；WebView2 隐藏期完成首次布局后换屏不重算 DPI，
+  CSS 视口比窗口客户区宽 → `margin: 0 auto` 的内容列视觉偏右、右侧列被裁。
+- 两端统一入口：Tauri `lib.rs#place_main_window`（setup 初始摆放 + `on_page_load` show 后经
+  `WIN_REASSERT_ONCE` 重申一次矩形，强制 WebView2 重新同步）；Electron `index.js#boundsForDisplay`
+  （createWindow 传显式 x/y + ready-to-show show 后重申 + `display-metrics-changed` 兜底钳制）。
+  目标屏一律取**光标所在屏**（回退主屏），尺寸钳制到该屏 workArea 的 90% 并居中。
+- 新增窗口复用上述入口；**不要**在 `tauri.conf.json` 恢复 `center: true`（它只按创建屏居中一次）。
+
 ## 其他已知限制（勿重复踩坑）
 
 - 原生菜单/托盘菜单/系统文件对话框的样式由操作系统决定，应用内无法主题化

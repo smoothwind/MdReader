@@ -237,6 +237,67 @@ fn set_doc_title(app: &AppHandle, dirty: bool, file_name: &str) {
     }
 }
 
+// ---------- 窗口摆放：按光标所在显示器钳制尺寸并居中 ----------
+//
+// 固定逻辑尺寸 1280×840 + conf 的 `center` 只在创建时按“创建时所在屏”（通常是主屏）
+// 居中一次。双屏缩放（DPI）不一致时窗口落到扩展屏会出现：
+//   1) 固定尺寸超出扩展屏工作区 → 右缘/底部溢出被裁；
+//   2) WebView2 在隐藏期完成首次布局，换屏后不重算 DPI，CSS 视口比窗口客户区宽，
+//      内容列 `margin: 0 auto` 在过宽视口中居中 → 视觉偏右、右侧列被裁。
+// 处理：按光标所在屏的 workArea（物理像素 × 该屏 scale）钳制尺寸并居中；
+// show 后重申一次矩形，强制 WebView2 与窗口边界重新同步。
+
+const WIN_LOGICAL_W: f64 = 1280.0;
+const WIN_LOGICAL_H: f64 = 840.0;
+const WIN_MIN_LOGICAL_W: f64 = 760.0;
+const WIN_MIN_LOGICAL_H: f64 = 540.0;
+/// 窗口占目标屏工作区的比例上限（四周留边）
+const WIN_WORK_AREA_RATIO: f64 = 0.9;
+/// show 后只重申一次：on_page_load 在热重载/二次导航会再触发，避免窗口被拽回
+static WIN_REASSERT_ONCE: OnceLock<()> = OnceLock::new();
+
+fn monitor_containing(app: &AppHandle, x: f64, y: f64) -> Option<tauri::window::Monitor> {
+    let (ix, iy) = (x.floor() as i32, y.floor() as i32);
+    app.available_monitors().ok()?.into_iter().find(|m| {
+        let p = m.position();
+        let s = m.size();
+        ix >= p.x && iy >= p.y && ix < p.x + s.width as i32 && iy < p.y + s.height as i32
+    })
+}
+
+/// 期望矩形：逻辑尺寸 × 目标屏 scale → 物理像素，钳制到工作区 90% 并在工作区内居中
+fn desired_window_rect(
+    monitor: &tauri::window::Monitor,
+) -> (tauri::PhysicalPosition<i32>, tauri::PhysicalSize<u32>) {
+    let scale = monitor.scale_factor();
+    let wa = monitor.work_area();
+    let dim = |desired: f64, min: f64, max: f64| -> u32 {
+        (desired * scale).round().max(min * scale).min(max).max(1.0) as u32
+    };
+    let w = dim(WIN_LOGICAL_W, WIN_MIN_LOGICAL_W, wa.size.width as f64 * WIN_WORK_AREA_RATIO);
+    let h = dim(WIN_LOGICAL_H, WIN_MIN_LOGICAL_H, wa.size.height as f64 * WIN_WORK_AREA_RATIO);
+    let x = wa.position.x + ((wa.size.width as i32 - w as i32) / 2).max(0);
+    let y = wa.position.y + ((wa.size.height as i32 - h as i32) / 2).max(0);
+    (tauri::PhysicalPosition::new(x, y), tauri::PhysicalSize::new(w, h))
+}
+
+/// 放置主窗口：目标屏 = 光标所在屏（取不到回退主屏）；最大化/全屏时不干预
+fn place_main_window(app: &AppHandle) {
+    let Some(w) = main_window(app) else { return };
+    if w.is_maximized().unwrap_or(false) || w.is_fullscreen().unwrap_or(false) {
+        return;
+    }
+    let monitor = app
+        .cursor_position()
+        .ok()
+        .and_then(|p| monitor_containing(app, p.x, p.y))
+        .or_else(|| app.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else { return };
+    let (pos, size) = desired_window_rect(&monitor);
+    let _ = w.set_size(size);
+    let _ = w.set_position(pos);
+}
+
 // ---------- menu ----------
 
 fn build_menu(app: &AppHandle) -> tauri::Result<()> {
@@ -1277,6 +1338,11 @@ pub fn run() {
             // 关键：必须 show 窗口本身（Webview::show 仅显示 webview 控件）
             let _ = webview.window().show();
             let _ = webview.window().set_focus();
+            // show 后重申一次矩形：强制 WebView2 与窗口边界重新同步，
+            // 修复“隐藏期首布局 + 换屏不重算 DPI”导致的视口失配（内容偏右/右缘裁切）
+            if WIN_REASSERT_ONCE.set(()).is_ok() {
+                place_main_window(webview.app_handle());
+            }
             if let Some(Some(p)) = INITIAL_FILE.get() {
                 let _ = webview.emit("doc:open-path", p.clone());
             }
@@ -1294,6 +1360,9 @@ pub fn run() {
                 *state.recent.lock_ok() = load_recent(&handle);
             }
             build_menu(&handle)?;
+
+            // 初始摆放：conf 的 center 只按创建屏居中，这里按光标所在屏重摆（见上方窗口摆放说明）
+            place_main_window(&handle);
 
             // 托盘
             let locale = handle.state::<AppState>().locale.lock_ok().clone();

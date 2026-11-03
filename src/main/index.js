@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, Menu, Tray, nativeImage, ipcMain, dialog, nativeTheme } from 'electron'
+import { app, shell, BrowserWindow, Menu, Tray, nativeImage, ipcMain, dialog, nativeTheme, screen } from 'electron'
 import { join, basename, dirname, resolve, isAbsolute } from 'node:path'
 import { readFile, writeFile, appendFile, access, mkdir, copyFile, rename, rm, readdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
@@ -154,10 +154,41 @@ async function appendLog(entry) {
   await appendFile(join(logsDir(), name), line + '\n', 'utf-8')
 }
 
+// ---------- 窗口摆放：按光标所在显示器钳制尺寸并居中 ----------
+//
+// 固定 1280×840 + OS 默认摆放 + 无任何 screen 处理时，双屏缩放（DPI）不一致会出现：
+//   1) 窗口落到扩展屏后超出其 workArea → 右缘/底部溢出被裁；
+//   2) 创建期尺寸换算用了另一块屏的 DPI，CSS 视口比窗口客户区宽，
+//      内容列 `margin: 0 auto` 在过宽视口中居中 → 视觉偏右、右侧列被裁。
+// 处理：按光标所在屏 workArea 钳制尺寸并居中；show 后按窗口所在屏重申一次边界。
+
+const WIN_WORK_AREA_RATIO = 0.9
+
+/** 目标显示器工作区内的期望边界（DIP）：钳制到工作区 90% 并居中 */
+function boundsForDisplay(display) {
+  const wa = display.workArea
+  const width = Math.max(1, Math.min(1280, Math.floor(wa.width * WIN_WORK_AREA_RATIO)))
+  const height = Math.max(1, Math.min(840, Math.floor(wa.height * WIN_WORK_AREA_RATIO)))
+  return {
+    x: wa.x + Math.floor((wa.width - width) / 2),
+    y: wa.y + Math.floor((wa.height - height) / 2),
+    width,
+    height
+  }
+}
+
+/** 光标所在显示器：窗口跟随“当前操作所在的屏”，双屏时避免总是落在主屏 */
+function cursorDisplay() {
+  try {
+    return screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  } catch {
+    return screen.getPrimaryDisplay()
+  }
+}
+
 function createWindow(startPath) {
   win = new BrowserWindow({
-    width: 1280,
-    height: 840,
+    ...boundsForDisplay(cursorDisplay()),
     minWidth: 760,
     minHeight: 540,
     show: false,
@@ -172,7 +203,12 @@ function createWindow(startPath) {
     }
   })
 
-  win.on('ready-to-show', () => win.show())
+  win.on('ready-to-show', () => {
+    win.show()
+    // show 后按窗口实际所在屏重申一次边界：强制渲染层按该屏 DPI 重新排版，
+    // 修复“创建期换算 DPI 与落定屏不一致”导致的视口失配（内容偏右/右缘裁切）
+    win.setBounds(boundsForDisplay(screen.getDisplayMatching(win.getBounds())))
+  })
   win.on('closed', () => {
     win = null
   })
@@ -700,6 +736,25 @@ if (!gotLock) {
     rebuildMenu()
     createWindow(pathFromArgv(process.argv))
     createTray()
+
+    // 显示器缩放/工作区变化（设置改缩放、插拔屏）后的兜底：
+    // 仅当窗口已超出所在屏 workArea 时重新钳制居中，不干预用户手动摆放的位置
+    screen.on('display-metrics-changed', (_e, display, changedMetrics) => {
+      if (!win || win.isDestroyed() || win.isMinimized()) return
+      if (win.isMaximized() || win.isFullScreen()) return
+      const relevant = (changedMetrics || []).some(
+        (m) => m === 'scaleFactor' || m === 'workArea' || m === 'bounds'
+      )
+      if (!relevant) return
+      const cur = win.getBounds()
+      const wa = screen.getDisplayMatching(cur).workArea
+      const within =
+        cur.x >= wa.x &&
+        cur.y >= wa.y &&
+        cur.x + cur.width <= wa.x + wa.width &&
+        cur.y + cur.height <= wa.y + wa.height
+      if (!within) win.setBounds(boundsForDisplay(screen.getDisplayMatching(cur)))
+    })
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow(null)
