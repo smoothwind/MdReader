@@ -84,7 +84,7 @@
 }
 
 .ux-cmdk__item--danger {
-  color: var(--ux-danger);
+  color: var(--ux-danger-fg);
 }
 
 .ux-cmdk__item-label {
@@ -166,7 +166,7 @@
 
 .ux-error__icon {
   font-size: var(--ux-fs-icon);
-  color: var(--ux-danger);
+  color: var(--ux-danger-fg);
 }
 
 .ux-error__title {
@@ -224,7 +224,7 @@
   flex: none;
   padding: var(--ux-sp-3);
   border-right: 1px solid var(--ux-border);
-  background: var(--ux-bg-panel);
+  background: transparent;
 }
 
 .ux-settings__item {
@@ -429,7 +429,7 @@
 .ux-dt__sort {
   flex: none;
   font-size: var(--ux-fs-lg);
-  color: var(--ux-accent);
+  color: var(--ux-accent-fg);
 }
 
 .ux-dt__sort--desc {
@@ -550,16 +550,16 @@
 }
 
 .ux-log__row--info .ux-log__icon {
-  color: var(--ux-info);
+  color: var(--ux-info-fg);
 }
 .ux-log__row--warn .ux-log__icon {
-  color: var(--ux-warning);
+  color: var(--ux-warning-fg);
 }
 .ux-log__row--error .ux-log__icon {
-  color: var(--ux-danger);
+  color: var(--ux-danger-fg);
 }
 .ux-log__row--error .ux-log__title {
-  color: var(--ux-danger);
+  color: var(--ux-danger-fg);
 }
 
 .ux-log__time {
@@ -593,4 +593,312 @@
   white-space: pre-wrap;
   word-break: break-all;
   background: var(--ux-bg-sunken);
+}
+
+/* ===== UxSplash 启动页（小点旋转成窗体）===== */
+
+.ux-splash {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ux-z-splash);
+  display: grid;
+  place-items: center;
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity var(--ux-dur-slow) var(--ux-ease-out),
+    transform var(--ux-dur-slow) var(--ux-ease-out);
+}
+
+/* window 模式：中心窗体 + 环境渐变底；cover 模式：整屏填充 */
+.ux-splash--cover {
+  background: var(--ux-bg);
+}
+
+.ux-splash--window {
+  background: radial-gradient(120% 90% at 50% 0%, var(--ux-bg-panel), var(--ux-bg));
+}
+
+.ux-splash--leaving,
+.ux-splash--gone {
+  opacity: 0;
+  transform: scale(1.04);
+}
+
+.ux-splash__stage {
+  position: relative;
+}
+
+.ux-splash__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ux-splash__rect {
+  fill: transparent;
+  stroke: var(--ux-accent);
+  stroke-width: 1.5;
+}
+
+.ux-splash__dot {
+  fill: var(--ux-accent);
+  filter: drop-shadow(0 0 6px var(--ux-accent));
+  transition: opacity var(--ux-dur-fast) var(--ux-ease-out);
+}
+
+.ux-splash__body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ux-sp-2);
+  padding: var(--ux-sp-4);
+  text-align: center;
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity var(--ux-dur-slow) var(--ux-ease-out),
+    transform var(--ux-dur-slow) var(--ux-ease-out);
+}
+
+/* 内容只在 settle（含 reduced-motion 直达）阶段可见 */
+.ux-splash--settle .ux-splash__body {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ux-splash__logo {
+  font-size: var(--ux-fs-icon);
+  color: var(--ux-accent);
+}
+
+.ux-splash__title {
+  margin: 0;
+  font-size: var(--ux-fs-display);
+  font-weight: var(--ux-fw-semibold);
+  color: var(--ux-fg);
+}
+
+.ux-splash__sub {
+  margin: 0;
+  font-size: var(--ux-fs-lg);
+  color: var(--ux-fg-muted);
+}
+
+.ux-splash__extra {
+  margin-top: var(--ux-sp-2);
+  color: var(--ux-fg-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ux-splash,
+  .ux-splash__body {
+    transition: none;
+  }
+}
+
+/* ===== UxConfigList 配置目录化编辑器 ===== */
+
+.ux-clist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ux-sp-2);
+}
+
+.ux-clist__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ux-sp-2);
+}
+
+.ux-clist__search {
+  flex: 1;
+  min-width: 160px;
+  max-width: 280px;
+}
+
+.ux-clist__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ux-sp-1);
+}
+
+.ux-clist__dirty {
+  margin-right: var(--ux-sp-1);
+  font-size: var(--ux-fs-xs);
+  color: var(--ux-warning-fg);
+}
+
+.ux-clist__filterbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ux-sp-2);
+  padding: var(--ux-sp-1) var(--ux-sp-2);
+  border: 1px dashed var(--ux-border);
+  border-radius: var(--ux-radius-sm);
+  font-size: var(--ux-fs-sm);
+  color: var(--ux-fg-muted);
+}
+
+.ux-clist__filterbar-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ux-clist__list {
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+}
+
+.ux-clist__group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--ux-sp-2);
+  width: 100%;
+  padding: var(--ux-sp-2);
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: var(--ux-fg);
+  cursor: pointer;
+  border-radius: var(--ux-radius-sm);
+}
+
+.ux-clist__group-head:hover {
+  background: var(--ux-bg-hover);
+}
+
+.ux-clist__group-head:focus-visible {
+  outline: var(--ux-focus-width) solid var(--ux-focus-ring);
+  outline-offset: 1px;
+}
+
+/* 纯 CSS 折叠箭头（非图标语义，免注册表争议） */
+.ux-clist__chevron {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--ux-fg-muted);
+  border-bottom: 2px solid var(--ux-fg-muted);
+  transform: rotate(-45deg);
+  transition: transform var(--ux-dur-fast) var(--ux-ease-out);
+}
+
+.ux-clist__chevron.is-open {
+  transform: rotate(45deg);
+}
+
+.ux-clist__group-name {
+  font-size: var(--ux-fs-lg);
+  font-weight: var(--ux-fw-semibold);
+}
+
+.ux-clist__badge {
+  flex: none;
+  font-size: var(--ux-fs-xs);
+  color: var(--ux-warning-fg);
+  background: var(--ux-warning-subtle);
+  border-radius: var(--ux-radius-full);
+  padding: 0 var(--ux-sp-2);
+  line-height: 1.8;
+}
+
+.ux-clist__items {
+  padding: 0 0 var(--ux-sp-2) var(--ux-sp-4);
+}
+
+.ux-clist__item {
+  border: 1px solid var(--ux-border);
+  border-radius: var(--ux-radius-sm);
+  padding: var(--ux-sp-2) var(--ux-sp-3);
+  margin-bottom: var(--ux-sp-2);
+}
+
+.ux-clist__item-head {
+  display: flex;
+  align-items: center;
+  gap: var(--ux-sp-2);
+  margin-bottom: var(--ux-sp-1);
+}
+
+.ux-clist__usage {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ux-fs-md);
+  font-weight: var(--ux-fw-medium);
+  color: var(--ux-fg);
+}
+
+.ux-clist__reset-one {
+  margin-left: auto;
+}
+
+.ux-clist__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--ux-sp-3);
+  margin-bottom: var(--ux-sp-1);
+  font-size: var(--ux-fs-xs);
+  color: var(--ux-fg-subtle);
+}
+
+.ux-clist__key {
+  font-family: var(--ux-font-family-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ux-clist__ph {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--ux-sp-1);
+  flex-wrap: wrap;
+}
+
+.ux-clist__ph code {
+  padding: 0 var(--ux-sp-1);
+  background: var(--ux-bg-sunken);
+  border-radius: var(--ux-radius-sm);
+  font-family: var(--ux-font-family-mono);
+}
+
+.ux-clist__editor {
+  width: 100%;
+  border: 1px solid var(--ux-border);
+  border-radius: var(--ux-radius-sm);
+  background: var(--ux-bg-sunken);
+  color: var(--ux-fg);
+  font: inherit;
+  font-family: var(--ux-font-family-mono);
+  font-size: var(--ux-fs-sm);
+  line-height: var(--ux-lh-normal);
+  padding: var(--ux-sp-1) var(--ux-sp-2);
+  resize: vertical;
+}
+
+.ux-clist__editor::placeholder {
+  color: var(--ux-fg-subtle);
+}
+
+.ux-clist__editor:focus-visible {
+  outline: var(--ux-focus-width) solid var(--ux-focus-ring);
+  outline-offset: 1px;
+}
+
+.ux-clist__empty {
+  min-height: 180px;
 }

@@ -2,6 +2,7 @@
 import { nextTick, onMounted, ref } from 'vue'
 import { useHoverIntent } from '@ux/composables'
 import UxIcon from '../icon/UxIcon.vue'
+import UxKbd from '../kbd/UxKbd.vue'
 import { isCheckable, menuItemKind, type MenuItem, type MenuItemKind } from './types'
 
 defineOptions({ name: 'UxMenuPanel' })
@@ -177,6 +178,7 @@ defineExpose({ getEl: () => rootEl.value })
   <div
     ref="rootEl"
     class="ux-menu"
+    data-ux-fx-surface
     :class="{ 'ux-menu--sub': submenu, 'is-flip': flip }"
     role="menu"
     tabindex="-1"
@@ -205,7 +207,7 @@ defineExpose({ getEl: () => rootEl.value })
             <UxIcon v-else-if="it.icon && !isCheckable(it)" :name="it.icon" />
           </span>
           <span class="ux-menu__item-label">{{ it.label }}</span>
-          <span v-if="it.shortcut" class="ux-menu__kbd">{{ it.shortcut }}</span>
+          <UxKbd v-if="it.shortcut" :keys="it.shortcut" class="ux-menu__kbd" />
           <UxIcon v-if="kind(it) === 'submenu'" name="act-chevron-right" class="ux-menu__caret" />
         </button>
         <UxMenuPanel
