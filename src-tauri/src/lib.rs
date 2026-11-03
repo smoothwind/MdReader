@@ -79,6 +79,9 @@ struct AppState {
     perf: Mutex<PerfConfig>,
     recent: Mutex<Vec<String>>,
     watch_paths: Mutex<Vec<String>>,
+    /// 外部修改轮询的 mtime 基线；应用自身保存成功后由 note_self_save 更新，
+    /// 避免"保存后继续编辑"被误报为外部修改
+    last_mtimes: Mutex<HashMap<String, SystemTime>>,
     exiting: Mutex<bool>,
     zoom: Mutex<f64>,
     locale: Mutex<String>,
@@ -193,6 +196,22 @@ fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
         Err(e) => {
             let _ = fs::remove_file(&tmp);
             Err(e)
+        }
+    }
+}
+
+/// 应用自身保存成功后重置该文件的 mtime 基线：外部修改轮询因此跳过本次写入，
+/// 避免"自动/手动保存后继续编辑"（disk 内容 ≠ 内存内容）被误报为外部修改。
+fn note_self_save(app: &AppHandle, path: &str) {
+    let mtime = fs::metadata(path).and_then(|m| m.modified()).ok();
+    let state = app.state::<AppState>();
+    let mut last = state.last_mtimes.lock_ok();
+    match mtime {
+        Some(mt) => {
+            last.insert(path.to_string(), mt);
+        }
+        None => {
+            last.remove(path);
         }
     }
 }
@@ -796,6 +815,7 @@ fn append_log(app: AppHandle, level: String, message: String, stack: Option<Stri
 #[tauri::command]
 fn save_file(app: AppHandle, path: String, content: String) -> Result<serde_json::Value, String> {
     atomic_write(Path::new(&path), content.as_bytes()).map_err(|e| e.to_string())?;
+    note_self_save(&app, &path);
     push_recent(&app, &path);
     build_menu(&app).map_err(|e| e.to_string())?;
     Ok(json!({ "path": path, "savedAt": now_ms() }))
@@ -817,6 +837,7 @@ async fn save_file_as(app: AppHandle, content: String, name: Option<String>) -> 
     };
     let path = file.into_path().map_err(|e| e.to_string())?.to_string_lossy().into_owned();
     atomic_write(Path::new(&path), content.as_bytes()).map_err(|e| e.to_string())?;
+    note_self_save(&app, &path);
     push_recent(&app, &path);
     build_menu(&app).map_err(|e| e.to_string())?;
     Ok(json!({
@@ -1173,7 +1194,6 @@ fn report_file_tree(app: AppHandle, state: State<AppState>, on: bool) {
 // ---------- 外部修改轮询：活动文件 mtime 变化 → 通知渲染层（内容比对在渲染层做） ----------
 
 fn poll_loop(app: AppHandle) {
-    let mut last: HashMap<String, SystemTime> = HashMap::new();
     loop {
         std::thread::sleep(Duration::from_millis(FILE_POLL_MS));
         let paths = {
@@ -1183,12 +1203,23 @@ fn poll_loop(app: AppHandle) {
         };
         for p in paths {
             let mtime = fs::metadata(&p).and_then(|m| m.modified()).ok();
-            match (mtime, last.get(&p)) {
-                (Some(mt), Some(prev)) if *prev != mt => {
-                    let _ = app.emit("doc:file-changed", p.clone());
+            // 每次仅短暂持锁，避免跨块持有 MutexGuard 的借用问题；
+            // 应用自身保存（note_self_save）与本循环可安全交错。
+            // 注意：State 必须 let 绑定延长生命周期，直接写
+            // app.state()...lock_ok() 会因临时 State 在语句结束即 drop 而借用失败
+            let changed = {
+                let state = app.state::<AppState>();
+                let last = state.last_mtimes.lock_ok();
+                match (mtime, last.get(&p)) {
+                    (Some(mt), Some(prev)) => *prev != mt,
+                    _ => false,
                 }
-                _ => {}
+            };
+            if changed {
+                let _ = app.emit("doc:file-changed", p.clone());
             }
+            let state = app.state::<AppState>();
+            let mut last = state.last_mtimes.lock_ok();
             match mtime {
                 Some(mt) => {
                     last.insert(p, mt);
@@ -1302,6 +1333,7 @@ pub fn run() {
             perf: Mutex::new(PerfConfig::default()),
             recent: Mutex::new(Vec::new()),
             watch_paths: Mutex::new(Vec::new()),
+            last_mtimes: Mutex::new(HashMap::new()),
             exiting: Mutex::new(false),
             zoom: Mutex::new(1.0),
             locale: Mutex::new("zh-CN".into()),

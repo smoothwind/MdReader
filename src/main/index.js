@@ -139,6 +139,16 @@ async function pollWatchedFiles() {
 
 setInterval(() => pollWatchedFiles().catch(() => {}), FILE_POLL_MS)
 
+/** 应用自身保存成功后重置 mtime 基线：跳过本次写入，避免"保存后继续编辑"被误报为外部修改 */
+async function noteSelfSave(p) {
+  try {
+    const st = await stat(p)
+    lastMtimes.set(p, st.mtimeMs)
+  } catch {
+    lastMtimes.delete(p)
+  }
+}
+
 // ---------- 错误日志：渲染层崩溃/未捕获 Promise 落盘到 userData/logs ----------
 
 function logsDir() {
@@ -410,6 +420,7 @@ function registerIpc() {
 
   ipcMain.handle('file:save', async (_e, { path, content }) => {
     await atomicWriteFile(path, content)
+    await noteSelfSave(path)
     await recent.push(path)
     rebuildMenu()
     return { path, savedAt: Date.now() }
@@ -536,6 +547,7 @@ function registerIpc() {
     })
     if (r.canceled || !r.filePath) return { canceled: true }
     await atomicWriteFile(r.filePath, content)
+    await noteSelfSave(r.filePath)
     await recent.push(r.filePath)
     rebuildMenu()
     return { canceled: false, path: r.filePath, name: basename(r.filePath), savedAt: Date.now() }

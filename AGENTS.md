@@ -131,6 +131,9 @@
 - 一切 `save/saveAs/exportSave` 调用必须捕获错误并给出用户可见提示（vditor tip 或弹窗）；
   `saveAllAndExit` 在任一保存失败或被取消时**必须停留**，禁止 `finally { requestExit() }`。
 - 落盘一律走双端的原子写（同目录临时文件 + rename），不要直接 `fs.write` 覆盖原文档。
+- 外部修改轮询（主进程 mtime 对比）必须排除应用自身写入：保存成功后立即重置该文件的
+  mtime 基线（Electron `noteSelfSave` / Tauri `note_self_save`）。否则"自动/手动保存后
+  继续编辑"会让 disk 内容 ≠ 内存内容，被误报为"文件已在外部修改"。
 
 ## GitHub Pages 与 vendor/uxkit
 
