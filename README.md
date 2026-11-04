@@ -17,7 +17,7 @@
 - **所见即所得编辑**：Vditor WYSIWYG 模式，输入即所见
 - **全类型源码可见**：点击 Mermaid/图表面板原地编辑源码（失焦自动渲染，编辑期间零渲染干扰）；双击段落/标题/表格原地编辑 Markdown 源码（Lute 精确双向转换）；视图菜单查看全文 Markdown
 - **代码块语言管理**：工具条输入框指定/修改语言，右上角徽标实时显示；未指定语言时保持纯源码态不被渲染打断
-- **多标签编辑**：标签切换 / 中键关闭 / 关闭前确认，会话自动恢复（重启还原标签、滚动位置与未保存状态）
+- **多标签编辑**：标签切换 / 拖拽排序 / 中键关闭 / 关闭前确认；右键编排菜单（关闭其他 / 关闭左侧 / 关闭右侧 / 全部关闭）；会话自动恢复（重启还原标签、滚动位置与未保存状态）
 - **脑图**：`Ctrl+M` 光标处插入模板，悬浮「编辑」打开画布可视化编辑，支持导出 JSON/SVG/PNG；悬浮工具条支持缩放（−/＋、实时比例、一键还原视图）
 - **Mermaid 图表**：流程图/时序图/甘特图离线渲染，可导出 PNG
 - **代码块工具**：SQL/JSON 格式化与压缩；**任意代码块导出为 PNG**（保留 ASCII 图排版）；复制源码
@@ -26,15 +26,15 @@
 - **富文本浮动工具条**：加粗/斜体/上下标/高亮/波浪线/颜色/字号/字体，选区一键转 Markdown
 - **目录浮窗**：标题跳转与当前章节高亮
 - **导出**：文档导出 HTML / Word、导出整篇长图、打印 / 导出 PDF（`Ctrl+P`）
-- **链接智能分流**：`#锚点` 文内跳转、外链开系统浏览器、本地 `.md` 应用内打开、其他文件交系统程序；悬浮显示地址 + 复制 + 锚点有效性校验
+- **链接智能分流**：`#锚点` 文内跳转、外链开系统浏览器、本地 `.md` 应用内打开、其他文件交系统程序；悬浮显示地址 + 复制 + 锚点有效性校验（标题含标点/连字符的省略锚点写法也能正确匹配）
 - **文件树侧边栏**：按文件夹浏览与打开文档，当前文件自动定位
-- **外部修改检测**：文档被其他程序修改后自动提示并重载
+- **外部修改检测**：文档被其他程序修改后自动提示并重载（应用自身保存自动重置 mtime 基线，"保存后继续编辑"不再误报）
 - **图片插入**：拖入或直接粘贴图片，自动复制到文档旁 `assets/` 并插入相对引用
 - **自动保存**：每 30 秒静默保存已落盘文档（可在设置中开关）
 - **性能与监控面板**：各进程内存/CPU 实时折线图（ECharts），托盘常驻
 - **渲染样式自定义**：设置中切换内容主题（自动/Ant Design/WeChat 等）与自定义 CSS，实时预览，导出/打印继承
 - **主题**：浅色 / 深色（滚动条、右键菜单等全面适配），深浅即切
-- **其他**：字数统计、最近打开、拖拽打开、单实例运行、双击 `.md` 打开（安装后文件关联）
+- **其他**：字数统计、最近打开、拖拽打开、单实例运行、双击 `.md` 打开（安装后文件关联）、多显示器感知窗口摆放（按光标所在屏 workArea 钳制并居中，双屏混合 DPI 不裁切不偏移）
 - **Web 演示版**：同一渲染层在浏览器中运行（文档存浏览器本地、导出走下载、PDF 降级打印），随 `main` 自动部署到 GitHub Pages
 - **质量**：vitest 单元测试（`npm run test`）、CI 构建与 Rust 测试、原子写盘、版本号单一来源同步
 
@@ -44,6 +44,7 @@
 | --- | --- |
 | 前端框架 | Vue 3 + Vite |
 | 编辑器 | Vditor（WYSIWYG） |
+| 组件库 | @uxkit（tokens / components / patterns / shell，UX-FRW 的 vendor 化副本） |
 | 方案 A | Electron（主进程 + preload） |
 | 方案 B | Tauri 2 + WebView2（Rust 外壳） |
 | 图表 | ECharts（按需加载） |
@@ -65,8 +66,14 @@ npm run dev:web    # Web 演示版开发调试（浏览器打开 http://localhos
 
 ```bash
 npm run dist         # Electron 方案 → release/（NSIS）
-npm run tauri:build  # Tauri 方案 → src-tauri/target/release/bundle/nsis/（NSIS，体积约 7MB）
+npm run tauri:build  # Tauri 方案 → src-tauri/target/release/bundle/nsis/（NSIS）
 ```
+
+> **构建注意事项**（本机踩坑实录）：
+> - 低内存机器（页面文件被禁用 / commit 余量紧张）给 cargo 限并发：`CARGO_BUILD_JOBS=2`，仍崩溃（rustc `0xc0000409`）时降 `1`；桌面版前端资源是编译期嵌入 exe 的，改了渲染层代码必须重编译 Rust 才能进安装包
+> - 本地构建默认直连 `../UX-FRW`（吃工作树），要产 CI 等价物用 `FORCE_VENDORED_UX=1` 锁定 `vendor/uxkit`
+> - web 构建失败（esbuild OOM）会清空 `dist-web/`，需重跑 `npm run build:web` 再打包
+> - `tauri:build` 的 `beforeBuildCommand` 会再跑一次 web 构建；dist-web 已是最新时可临时置空该命令跳过（注意还原 `tauri.conf.json`）
 
 CI：推送 `v*` 标签会自动构建 Tauri 安装包并附加到 GitHub Release（见 `.github/workflows/`）。
 
@@ -125,7 +132,7 @@ MdReader/
             ├── composables/useTheme.js
             ├── utils/mindmap-convert.js
             ├── components/
-            │   ├── TabBar.vue          # 标签栏与全局动作
+            │   ├── TabBar.vue          # 标签栏（UxTabs：拖拽排序/右键编排）与全局动作
             │   ├── EditorPane.vue      # Vditor 封装（悬浮工具条/查找/导出/右键菜单）
             │   ├── MindMapEditor.vue   # 脑图画布（按需加载）
             │   ├── FileTreePanel.vue   # 文件树侧边栏（FileTreeNode 递归节点）
@@ -133,7 +140,9 @@ MdReader/
             │   ├── StatusBar.vue       # 字数/保存时间
             │   ├── SettingsDialog.vue  # 性能与监控
             │   └── LineChart.vue       # ECharts 折线图（按需加载）
-            └── styles/main.css   # CSS 变量双主题
+            └── styles/
+                ├── tokens.css          # 设计令牌单一来源（CI check:tokens 拦截裸值）
+                └── main.css            # 布局与组件样式（双主题）
 ```
 
 ## 许可证
